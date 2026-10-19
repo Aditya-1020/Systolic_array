@@ -2,248 +2,198 @@
 module systolic_array #(
     parameter int N = 8,
     parameter int DW = 8,
+    parameter int OUT_W = 32,
+    // internal
     parameter int ACC_W = 2*DW + $clog2(N),
-    parameter int ADDR_W = 32,
-    parameter int LEN_W = 32
+    parameter int LAT = 2*N,
+    parameter int WCNT_W = (N > 1) ? $clog2(N) : 1
 )(
     input wire i_clk,
     input wire i_rstn,
-    input wire start,
     
-    input wire cfg_load_w,
-    input wire [ADDR_W-1:0] cfg_w_base,
-    input wire [ADDR_W-1:0] cfg_a_base,
-    input wire [ADDR_W-1:0] cfg_o_base,
-    input wire [LEN_W-1:0] cfg_len,
+    input logic i_load_w,
+    output logic o_busy,
+    output logic o_done,
+    output logic o_weights_loaded,
 
-    output logic busy,
-    output logic done,
-    output logic weights_loaded,
-
-    // shared rdport weights then act
-    input wire rd_gnt,
-    input wire rd_rvalid,
-    input wire signed [N*DW-1:0] rd_rdata,
-    output logic rd_req,
-    output logic [ADDR_W-1:0] rd_addr,
+    input logic s_axis_w_tvalid,
+    input logic [N*DW-1:0] s_axis_w_tdata,
+    output logic s_axis_w_tready,
     
-    output logic wr_en,
-    output logic [ADDR_W-1:0] wr_addr,
-    output logic signed [N*ACC_W-1:0] wr_data
+    input logic s_axis_a_tvalid,
+    input logic [N*DW-1:0] s_axis_a_tdata,
+    input logic s_axis_a_tlast,
+    output logic s_axis_a_tready,
+
+    input logic m_axis_c_tready,
+    output logic m_axis_c_tvalid,
+    output logic [N*OUT_W-1:0] m_axis_c_tdata,
+    output logic m_axis_c_tlast
 );
-localparam int WEIGHT_CNT_W = (N>1) ? $clog2(N+1) : 1;
-localparam int LENGTH_CNT_W = LEN_W + 1;
-localparam int VALID_LATENCY = 2*N - 1;
-localparam int SKEW_STAGES = (N>1) ? N-1 : 1;
 
-typedef enum logic [1:0] {
-    IDLE,
-    LOAD_WEIGHTS,
-    LOAD_ACTIVATIONS,
-    FLUSH
-} state_t;
-state_t state;
+wire rstn_sync;
+reset_sync u_reset_sync ( .clk(i_clk), .arstn(i_rstn), .rstn_sync(rstn_sync));
 
-logic [ADDR_W-1:0] w_base_q, a_base_q, o_base_q;
-logic [LEN_W-1:0] len_q;
+typedef enum logic { S_RUN = 1'b0, S_LOAD_W = 1'b1 } state_t;
+state_t state_q, next_state;
 
-logic [WEIGHT_CNT_W-1:0] w_req_cnt, w_rsp_cnt;
-logic [LENGTH_CNT_W-1:0] a_req_cnt, a_rsp_cnt;
-logic [LENGTH_CNT_W-1:0] out_cnt;
+logic [WCNT_W-1:0] w_cnt_q;
+logic w_loaded_q, next_w_loaded;
+logic load_pend_q, next_load_pend;
+logic done_q, next_done;
 
-logic signed [N*DW-1:0] a_q;
-logic a_valid_q;
-logic [VALID_LATENCY-1:0] valid_pipe;
+logic [LAT-1:0] vvalid_q; // valid per pipe
+logic [LAT-1:0] vlast_q;
 
-logic signed [N*DW-1:0] a_skew_data [0:SKEW_STAGES-1];
-logic signed [N*DW-1:0] a_left;
-logic signed [N*ACC_W-1:0] array_bottom;
-logic signed [N*ACC_W-1:0] aligned_data;
+logic stall, pipe_busy, adv;
+logic a_fire, w_fire, w_last, m_fire, load_go;
 
-wire rstn_sync, weight_load_en;
-reset_sync u_rst_sync ( .clk(i_clk), .arstn(i_rstn), .rstn_sync(rstn_sync) );
+assign pipe_busy = |vvalid_q;
+assign stall = m_axis_c_tvalid && !m_axis_c_tready; // freze pipeling
+assign load_go = load_pend_q && (state_q == S_RUN) && !pipe_busy;
 
-assign busy = (state !== IDLE);
-assign weight_load_en = (state == LOAD_WEIGHTS) && rd_rvalid;
-assign wr_en = valid_pipe[VALID_LATENCY-1];
-assign wr_data = aligned_data;
-assign wr_addr = o_base_q + ADDR_W'(out_cnt);
+assign s_axis_w_tready = (state_q == S_LOAD_W);
+assign s_axis_a_tready = (state_q == S_RUN) && w_loaded_q && !load_pend_q && !stall;
+
+assign w_fire = s_axis_w_tvalid && s_axis_w_tready;
+assign a_fire = s_axis_a_tvalid && s_axis_a_tready;
+assign m_fire = m_axis_c_tvalid && m_axis_c_tready;
+assign w_last = w_fire && (w_cnt_q == WCNT_W'(N-1));
+
+assign adv = !stall && (pipe_busy || a_fire); // advance cycle while working
 
 always_comb begin
-    rd_req = 1'b0;
-    rd_addr = '0;
-
-    unique case (state)
-        LOAD_WEIGHTS: begin
-            if (w_req_cnt < N) begin
-                rd_req = 1'b1;
-                rd_addr = w_base_q + ADDR_W'(N - 1 - w_req_cnt);
-            end
-        end
-        
-        LOAD_ACTIVATIONS: begin
-            if (a_req_cnt < {1'b0, len_q}) begin
-                rd_req = 1'b1;
-                rd_addr = a_base_q + ADDR_W'(a_req_cnt);
-            end
-        end
-
-        default: begin
-            rd_req = 1'b0;
-            rd_addr = '0;
-        end
+    next_state = state_q;
+    unique case (state_q)
+        S_RUN: if (load_go) next_state = S_LOAD_W;
+        S_LOAD_W: if (w_last) next_state = S_RUN;
     endcase
 end
 
 always_ff @(posedge i_clk or negedge rstn_sync) begin
     if (!rstn_sync) begin
-        state <= IDLE;
-        done <= 1'b0;
-        weights_loaded <= 1'b0;
-        w_base_q <= '0;
-        a_base_q <= '0;
-        o_base_q <= '0;
-        len_q <= '0;
-        w_req_cnt <= '0;
-        w_rsp_cnt <= '0;
-        a_req_cnt <= '0;
-        out_cnt <= '0;
+        state_q <= S_RUN;
     end else begin
-        done <= 1'b0;
-        if (wr_en) begin
-            out_cnt <= out_cnt + 1'b1;
-        end
-
-        unique case (state)
-            IDLE: begin
-                if (start && (cfg_len !== '0) && (cfg_load_w || weights_loaded)) begin
-                    w_base_q <= cfg_w_base;
-                    a_base_q <= cfg_a_base;
-                    o_base_q <= cfg_o_base;
-                    len_q <= cfg_len;
-                    
-                    w_req_cnt <= '0;
-                    w_rsp_cnt <= '0;
-                    a_req_cnt <= '0;
-                    a_rsp_cnt <= '0;
-                    out_cnt <= '0;
-
-                    if (cfg_load_w) begin
-                        weights_loaded <= 1'b0;
-                        state <= LOAD_WEIGHTS;
-                    end else begin
-                        state <= LOAD_ACTIVATIONS;
-                    end
-                end
-            end
-
-            LOAD_WEIGHTS: begin
-                if (rd_req && rd_gnt) begin
-                    w_req_cnt <= w_req_cnt + 1'b1;
-                end
-
-                if (rd_rvalid) begin
-                    if (w_rsp_cnt == N-1) begin
-                        weights_loaded <= 1'b1;
-                        a_req_cnt <= '0;
-                        a_rsp_cnt <= '0;
-                        state <= LOAD_ACTIVATIONS;
-                    end else begin
-                        w_rsp_cnt <= w_rsp_cnt + 1'b1;
-                    end
-                end
-            end
-
-            LOAD_ACTIVATIONS: begin
-                if (rd_req && rd_gnt) begin
-                    a_req_cnt <= a_req_cnt + 1'b1;
-                end
-                
-                if (rd_rvalid) begin
-                    a_rsp_cnt <= a_rsp_cnt + 1'b1;
-                    if (a_rsp_cnt == ({1'b0, len_q} - 1'b1)) begin
-                        state <= FLUSH;
-                    end
-                end
-            end
-
-            FLUSH: begin
-                if (!a_valid_q && !(|valid_pipe) && (out_cnt == {1'b0, len_q})) begin
-                    done <= 1'b1;
-                    state <= IDLE;
-                end
-            end
-
-            default: begin
-                state <= IDLE;
-                weights_loaded <= 1'b0;
-            end
-        endcase
+        state_q <= next_state;
     end
 end
+
+always_comb begin
+    next_w_loaded = w_loaded_q;
+    if (load_go) begin
+        next_w_loaded = 1'b0;
+    end else if (w_last) begin
+        next_w_loaded = 1'b1;
+    end
+end
+
+// ignore request while loading
+assign next_load_pend = ((load_pend_q || (i_load_w && state_q == S_RUN)) && !load_go);
+assign next_done = (m_fire && m_axis_c_tlast) || w_last;
 
 always_ff @(posedge i_clk or negedge rstn_sync) begin
     if (!rstn_sync) begin
-        a_q <= '0;
-        a_valid_q <= 1'b0;
-        valid_pipe <= '0;
+        w_cnt_q <= '0;
+        w_loaded_q <= 1'b0;
+        load_pend_q <= 1'b0;
+        done_q <= 1'b0;
     end else begin
-        a_q <= '0;
-        a_valid_q <= 1'b0;
-
-        if ((state == LOAD_ACTIVATIONS) && rd_rvalid) begin
-            a_q <= '0;
-            a_valid_q <= 1'b0;
-        end
-
-        valid_pipe[0] <= a_valid_q;
-        for (int k=1; k<VALID_LATENCY; k=k+1) begin
-            valid_pipe[k] <= valid_pipe[k-1];
+        w_loaded_q <= next_w_loaded;
+        load_pend_q <= next_load_pend;
+        done_q <= next_done;
+        if (w_last) begin
+            w_cnt_q <= '0;
+        end else if (w_fire) begin
+            w_cnt_q <= w_cnt_q + 1'b1;
         end
     end
 end
 
-always_ff @(posedge i_clk) begin
-    a_skew_data[0] <= a_q;
-    for (int k=0; k<SKEW_STAGES; k=k+1) begin
-        a_skew_data[k] <= a_skew_data[k-1];
+assign o_busy = (state_q == S_LOAD_W) || load_pend_q || pipe_busy;
+assign o_done = done_q;
+assign o_weights_loaded = w_loaded_q;
+
+// valid and tlast pipe
+always_ff @(posedge i_clk or negedge rstn_sync) begin
+    if (!rstn_sync) begin
+        vvalid_q <= '0;
+        vlast_q <= '0;
+    end else if (adv) begin
+        vvalid_q <= {vvalid_q[LAT-2:0], a_fire};
+        vlast_q <= {vlast_q[LAT-2:0], a_fire && s_axis_a_tlast};
     end
 end
 
+assign m_axis_c_tvalid = vvalid_q[LAT-1];
+assign m_axis_c_tlast = vlast_q[LAT-1];
+
+
+// input skew
+logic [N*DW-1:0] a_in;
+logic signed [N*DW-1:0] a_left;
+
+assign a_in = a_fire ? s_axis_a_tdata : '0;
+
+genvar r;
 generate
-    for (genvar lane=0; lane<N; lane=lane+1) begin : gen_activations
-        if (lane ==0) begin : gen_lane_zero
-            assign a_left[lane*DW +: DW] = a_q[lane*DW +: DW];
-        end else begin : gen_lane_delayed
-            assign a_left[lane*DW +: DW] = a_skew_data[lane-1][lane*DW +: DW];
+    for (r=0; r<N; r=r+1) begin : gen_skew
+        logic signed [DW-1:0] sr_q [0:r];
+
+        always_ff @(posedge i_clk or negedge rstn_sync) begin
+            if (!rstn_sync) begin
+                for (int k=0; k<=r; k=k+1) begin
+                    sr_q[k] <= '0;
+                end
+            end else if (adv) begin
+                sr_q[0] <= a_in[r*DW +: DW];
+                for (int k=1; k<=r; k=k+1) begin
+                    sr_q[k] <= sr_q[k-1];
+                end
+            end
         end
+        assign a_left[r*DW +: DW] = sr_q[r];
     end
 endgenerate
 
-array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
+logic signed [N*ACC_W-1:0] c_bottom;
+
+array #( .N(N), .DW(DW), .ACC_W(ACC_W) ) u_array (
     .i_clk     (i_clk),
-    .i_load_en (weight_load_en),
-    .i_w_top   (rd_rdata),
+    .i_rstn    (rstn_sync),
+    .i_en      (adv),
+    .i_load_en (w_fire),
+    .i_w_top   (s_axis_w_tdata),
     .i_a_left  (a_left),
-    .o_c_bottom(array_bottom)
+    .o_c_bottom(c_bottom)
 );
 
+// output deskew
+genvar c;
 generate
-    for (genvar col=0; col<N; col=col+1) begin : gen_out_deskew
-        if (col == N-1) begin : gen_last_col
-            assign aligned_data[col*ACC_W +: ACC_W] = array_bottom[col*ACC_W +: ACC_W];
-        end else begin : gen_delayed_col
-            localparam int DELAY = N-1-col;
-            logic signed [ACC_W-1:0] delay_line [0:DELAY-1];
+    for (c=0; c<N; c=c+1) begin : gen_dskew
+        localparam int DELAY = N - 1 - c;
+        logic signed [ACC_W-1:0] c_lane;
+        
+        if (DELAY==0) begin : gen_direct
+            assign c_lane = c_bottom[c*ACC_W +: ACC_W];
+        end else begin : gen_delay
+            logic signed [ACC_W-1:0] dly_q [0:DELAY-1];
             
-            always_ff @(posedge i_clk) begin
-                delay_line[0] <= array_bottom[col*ACC_W +: ACC_W];
-                for (int k=1; k<DELAY; k=k+1) begin
-                    delay_line[k] <= delay_line[k-1];
+            always_ff @(posedge i_clk or negedge rstn_sync) begin
+                if (!rstn_sync) begin
+                    for (int k=0; k<DELAY; k=k+1) begin
+                        dly_q[k] <= '0;
+                    end
+                end else if (adv) begin
+                    dly_q[0] <= c_bottom[c*ACC_W +: ACC_W];
+                    for (int k=1; k<DELAY; k=k+1) begin
+                        dly_q[k] <= dly_q[k-1];
+                    end
                 end
             end
-            assign aligned_data[col*ACC_W +: ACC_W] = delay_line[DELAY-1];
+            assign c_lane = dly_q[DELAY-1];
         end
+        assign m_axis_c_tdata[c*OUT_W +: OUT_W] = OUT_W'(c_lane);
     end
 endgenerate
 
