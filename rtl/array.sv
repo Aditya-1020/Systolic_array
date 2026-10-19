@@ -15,32 +15,28 @@ logic signed [DW-1:0] a_wire [0:N-1][0:N];
 logic signed [DW-1:0] w_wire [0:N][0:N-1];
 logic signed [ACC_W-1:0] psum_wire [0:N][0:N-1];
 
-genvar i, j;
 generate
-    for (i=0; i<N; i=i+1) begin : g_left
-        assign a_wire[i][0] = i_a_left[i*DW +: DW];
+    for (genvar row=0; row<N; row=row+1) begin : g_left
+        assign a_wire[row][0] = i_a_left[row*DW +: DW];
     end
 
-    for (j=0; j<N; j=j+1) begin : g_top
-        assign w_wire[0][j] = i_w_top[j*DW +: DW];
-        assign psum_wire[0][j] = '0;
-        assign o_c_bottom[j*ACC_W +: ACC_W] = psum_wire[N][j];
+    for (genvar col=0; col<N; col=col+1) begin : g_top
+        assign w_wire[0][col] = i_w_top[col*DW +: DW];
+        assign psum_wire[0][col] = '0;
+        assign o_c_bottom[col*ACC_W +: ACC_W] = psum_wire[N][col];
     end
 
-    for (i=0; i<N; i=i+1) begin : gen_pe_row
-        for (j=0; j<N; j=j+1) begin : gen_pe_col
-            pe #(
-                .DW(DW),
-                .ACC_W(ACC_W)
-            ) pe_inst (
+    for (genvar row=0; row<N; row=row+1) begin : gen_pe_row
+        for (genvar col=0; col<N; col=col+1) begin : gen_pe_col
+            pe #(.DW(DW), .ACC_W(ACC_W)) pe_inst (
                 .i_clk   (i_clk),
                 .i_load_en(i_load_en),
-                .i_w     (w_wire[i][j]),
-                .i_a     (a_wire[i][j]),
-                .i_psum  (psum_wire[i][j]),
-                .o_w     (w_wire[i+1][j]),
-                .o_a     (a_wire[i][j+1]),
-                .o_psum  (psum_wire[i+1][j])
+                .i_w     (w_wire[row][col]),
+                .i_a     (a_wire[row][col]),
+                .i_psum  (psum_wire[row][col]),
+                .o_w     (w_wire[row+1][col]),
+                .o_a     (a_wire[row][col+1]),
+                .o_psum  (psum_wire[row+1][col])
             );
         end
     end
