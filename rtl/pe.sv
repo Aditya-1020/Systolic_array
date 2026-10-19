@@ -1,7 +1,7 @@
 `default_nettype none
 module pe #(
     parameter int DW = 8,
-    parameter int ACC_W = 32
+    parameter int ACC_W = 19
 )(
     input wire i_clk,
     input wire i_load_en, // weight load
