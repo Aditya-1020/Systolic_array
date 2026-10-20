@@ -31,9 +31,6 @@ module systolic_array #(
     output logic m_axis_c_tlast
 );
 
-wire rstn_sync;
-reset_sync u_reset_sync ( .clk(i_clk), .arstn(i_rstn), .rstn_sync(rstn_sync));
-
 typedef enum logic { S_RUN = 1'b0, S_LOAD_W = 1'b1 } state_t;
 state_t state_q, next_state;
 
@@ -70,8 +67,8 @@ always_comb begin
     endcase
 end
 
-always_ff @(posedge i_clk or negedge rstn_sync) begin
-    if (!rstn_sync) begin
+always_ff @(posedge i_clk or negedge i_rstn) begin
+    if (!i_rstn) begin
         state_q <= S_RUN;
     end else begin
         state_q <= next_state;
@@ -91,8 +88,8 @@ end
 assign next_load_pend = ((load_pend_q || (i_load_w && state_q == S_RUN)) && !load_go);
 assign next_done = (m_fire && m_axis_c_tlast) || w_last;
 
-always_ff @(posedge i_clk or negedge rstn_sync) begin
-    if (!rstn_sync) begin
+always_ff @(posedge i_clk or negedge i_rstn) begin
+    if (!i_rstn) begin
         w_cnt_q <= '0;
         w_loaded_q <= 1'b0;
         load_pend_q <= 1'b0;
@@ -114,8 +111,8 @@ assign o_done = done_q;
 assign o_weights_loaded = w_loaded_q;
 
 // valid and tlast pipe
-always_ff @(posedge i_clk or negedge rstn_sync) begin
-    if (!rstn_sync) begin
+always_ff @(posedge i_clk or negedge i_rstn) begin
+    if (!i_rstn) begin
         vvalid_q <= '0;
         vlast_q <= '0;
     end else if (adv) begin
@@ -139,8 +136,8 @@ generate
     for (r=0; r<N; r=r+1) begin : gen_skew
         logic signed [DW-1:0] sr_q [0:r];
 
-        always_ff @(posedge i_clk or negedge rstn_sync) begin
-            if (!rstn_sync) begin
+        always_ff @(posedge i_clk or negedge i_rstn) begin
+            if (!i_rstn) begin
                 for (int k=0; k<=r; k=k+1) begin
                     sr_q[k] <= '0;
                 end
@@ -159,7 +156,7 @@ logic signed [N*ACC_W-1:0] c_bottom;
 
 array #( .N(N), .DW(DW), .ACC_W(ACC_W) ) u_array (
     .i_clk     (i_clk),
-    .i_rstn    (rstn_sync),
+    .i_rstn    (i_rstn),
     .i_en      (adv),
     .i_load_en (w_fire),
     .i_w_top   (s_axis_w_tdata),
@@ -179,8 +176,8 @@ generate
         end else begin : gen_delay
             logic signed [ACC_W-1:0] dly_q [0:DELAY-1];
             
-            always_ff @(posedge i_clk or negedge rstn_sync) begin
-                if (!rstn_sync) begin
+            always_ff @(posedge i_clk or negedge i_rstn) begin
+                if (!i_rstn) begin
                     for (int k=0; k<DELAY; k=k+1) begin
                         dly_q[k] <= '0;
                     end
