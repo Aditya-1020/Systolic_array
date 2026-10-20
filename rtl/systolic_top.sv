@@ -1,5 +1,5 @@
 `default_nettype none
-module sys_mem #(
+module systolic_top #(
     parameter int N = 8,
     parameter int DW = 8,
     parameter int OW = 32, // core lane wiedth
