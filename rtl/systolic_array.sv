@@ -140,7 +140,7 @@ generate
     for (r=0; r<N; r=r+1) begin : gen_skew
         logic signed [DW-1:0] sr_q [0:r];
 
-        always_ff @(posedge i_clk or negedge i_rstn) begin
+        always_ff @(posedge clk_adv or negedge i_rstn) begin
             if (!i_rstn) begin
                 for (int k=0; k<=r; k=k+1) begin
                     sr_q[k] <= '0;
@@ -179,7 +179,7 @@ generate
         end else begin : gen_delay
             logic signed [ACC_W-1:0] dly_q [0:DELAY-1];
             
-            always_ff @(posedge i_clk or negedge i_rstn) begin
+            always_ff @(posedge clk_adv or negedge i_rstn) begin
                 if (!i_rstn) begin
                     for (int k=0; k<DELAY; k=k+1) begin
                         dly_q[k] <= '0;

@@ -1,14 +1,22 @@
+EDA_HOME ?= $(HOME)/.eda
 ORFS_DIR := $(EDA_HOME)/orfs-nix/OpenROAD-flow-scripts
-ORFS_MAKEFILE := $(ORFS_DIR)/flow/Makefile
+FLOW_DIR := $(ORFS_DIR)/flow
 DESIGN_CONFIG := $(CURDIR)/design-configs/config.mk
+WORK_HOME := $(CURDIR)/orfs-out
+VARIANT ?= icg
 
-.PHONY: orfs orfs-synth orfs-floorplan
+ORFS = $(MAKE) -C $(FLOW_DIR) \
+		DESIGN_CONFIG=$(DESIGN_CONFIG) \
+		WORK_HOME=$(WORK_HOME) \
+		VARIANT=$(VARIANT)
+
+.PHONY: orfs clean-orfs
 
 orfs:
-	$(MAKE) --file=$(ORFS_MAKEFILE) DESIGN_CONFIG=$(DESIGN_CONFIG)
+	$(ORFS)
 
-orfs-synth:
-	$(MAKE) --file=$(ORFS_MAKEFILE) DESIGN_CONFIG=$(DESIGN_CONFIG) synth
+orfs-%: # make orfs* synth, floorplan, place, route, cts
+	$(ORFS) $*
 
-orfs-floorplan:
-	$(MAKE) --file=$(ORFS_MAKEFILE) DESIGN_CONFIG=$(DESIGN_CONFIG) floorplan
+clean-orfs:
+	rm -rf $(WORK_HOME)
