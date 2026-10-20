@@ -5,10 +5,9 @@ module array #(
     parameter int DW = 8,
     parameter int ACC_W = 19
 )(
-    input wire i_clk,
+    input wire i_clk_w,
+    input wire i_clk_adv,
     input wire i_rstn,
-    input wire i_en,
-    input wire i_load_en,
     input wire signed [N*DW-1:0] i_w_top,
     input wire signed [N*DW-1:0] i_a_left,
     output logic signed [N*ACC_W-1:0] o_c_bottom
@@ -32,10 +31,9 @@ generate
     for (row=0; row<N; row=row+1) begin : gen_pe_row
         for (col=0; col<N; col=col+1) begin : gen_pe_col
             pe #(.DW(DW), .ACC_W(ACC_W)) pe_inst (
-                .i_clk   (i_clk),
+                .i_clk_w (i_clk_w),
+                .i_clk_adv(i_clk_adv),
                 .i_rstn  (i_rstn),
-                .i_en    (i_en),
-                .i_load_en(i_load_en),
                 .i_w     (w_wire[row][col]),
                 .i_a     (a_wire[row][col]),
                 .i_psum  (psum_wire[row][col]),

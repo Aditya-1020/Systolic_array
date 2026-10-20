@@ -59,6 +59,10 @@ assign w_last = w_fire && (w_cnt_q == WCNT_W'(N-1));
 
 assign adv = !stall && (pipe_busy || a_fire); // advance cycle while working
 
+logic clk_w, clk_adv;
+OPENROAD_CLKGATE u_cg_w (.CK(i_clk), .E(w_fire), .GCK(clk_w));
+OPENROAD_CLKGATE u_cg_adv (.CK(i_clk), .E(adv), .GCK(clk_adv));
+
 always_comb begin
     next_state = state_q;
     unique case (state_q)
@@ -155,13 +159,12 @@ endgenerate
 logic signed [N*ACC_W-1:0] c_bottom;
 
 array #( .N(N), .DW(DW), .ACC_W(ACC_W) ) u_array (
-    .i_clk     (i_clk),
-    .i_rstn    (i_rstn),
-    .i_en      (adv),
-    .i_load_en (w_fire),
-    .i_w_top   (s_axis_w_tdata),
-    .i_a_left  (a_left),
-    .o_c_bottom(c_bottom)
+    .i_clk_w     (clk_w),
+    .i_clk_adv   (clk_adv),
+    .i_rstn      (i_rstn),
+    .i_w_top     (s_axis_w_tdata),
+    .i_a_left    (a_left),
+    .o_c_bottom  (c_bottom)
 );
 
 // output deskew
