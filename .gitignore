@@ -1,3 +1,7 @@
+.hx/
+.vscode/
 .venv/
 notes/
 orfs-out/
+base_rtl_noicg/
+dump/
