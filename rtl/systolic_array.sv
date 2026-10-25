@@ -3,7 +3,6 @@ module systolic_array #(
     parameter int N = 8,
     parameter int DW = 8,
     parameter int OUT_W = 32,
-    // internal
     parameter int ACC_W = 2*DW + $clog2(N),
     parameter int LAT = 2*N,
     parameter int WCNT_W = (N > 1) ? $clog2(N) : 1
@@ -88,7 +87,6 @@ always_comb begin
     end
 end
 
-// ignore request while loading
 assign next_load_pend = ((load_pend_q || (i_load_w && state_q == S_RUN)) && !load_go);
 assign next_done = (m_fire && m_axis_c_tlast) || w_last;
 
@@ -114,7 +112,6 @@ assign o_busy = (state_q == S_LOAD_W) || load_pend_q || pipe_busy;
 assign o_done = done_q;
 assign o_weights_loaded = w_loaded_q;
 
-// valid and tlast pipe
 always_ff @(posedge i_clk or negedge i_rstn) begin
     if (!i_rstn) begin
         vvalid_q <= '0;
@@ -129,7 +126,6 @@ assign m_axis_c_tvalid = vvalid_q[LAT-1];
 assign m_axis_c_tlast = vlast_q[LAT-1];
 
 
-// input skew
 logic [N*DW-1:0] a_in;
 logic signed [N*DW-1:0] a_left;
 
@@ -163,7 +159,6 @@ array #( .N(N), .DW(DW), .ACC_W(ACC_W) ) u_array (
     .o_c_bottom  (c_bottom)
 );
 
-// output deskew
 genvar c;
 generate
     for (c=0; c<N; c=c+1) begin : gen_dskew

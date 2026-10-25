@@ -5,3 +5,7 @@ notes/
 orfs-out/
 base_rtl_noicg/
 dump/
+__pycache__/
+*.pyc
+sim_build_*/
+sta_out/

@@ -2,8 +2,8 @@
 module systolic_top #(
     parameter int N = 8,
     parameter int DW = 8,
-    parameter int OW = 32, // core lane wiedth
-    parameter int HALF_DEPTH = 128, // match macro
+    parameter int OW = 32,
+    parameter int HALF_DEPTH = 128,
     parameter int VW = N*DW,
     parameter int AW = $clog2(HALF_DEPTH)
 )(
@@ -82,7 +82,6 @@ logic r_w_en;
 logic [AW:0] r_w_addr;
 logic [VW-1:0] r_w_data;
 
-// inst ping pong result buffer sram
 pp_buf_1r1w #(.DW(VW), .HALF_DEPTH(HALF_DEPTH), .AW(AW)) inst_acc_buf (
     .i_clk    (i_clk),
     .i_rstn   (rstn_sync),
@@ -107,12 +106,10 @@ pp_buf_1r1w #(.DW(VW), .HALF_DEPTH(HALF_DEPTH), .AW(AW)) inst_res_buf (
     .o_r_valid(o_host_r_valid)
 );
 
-/// feeder to core
 logic f_w_tvalid, f_w_tready;
 logic f_a_tvalid, f_a_tready, f_a_tlast;
 logic [VW-1:0] f_tdata;
 
-//feeeder inst
 feeder #(.VW(VW), .AW(AW),.WROWS(N)) u_feeder (
     .i_clk          (i_clk),
     .i_rstn         (rstn_sync),
@@ -164,7 +161,6 @@ systolic_array #(.N(N), .DW(DW), .OUT_W (OW)) u_core (
 logic pp_tvalid, pp_tready, pp_tlast;
 logic [VW-1:0] pp_tdata;
 
-// post proc int
 postproc #(.N(N), .IW(OW), .DW(DW)) u_postproc (
     .i_clk       (i_clk),
     .i_rstn      (rstn_sync),

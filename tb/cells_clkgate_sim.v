@@ -9,7 +9,6 @@ output GCK
 );
 reg e_lat = 1'b0;
 
-// Capture enable while the input clock is low.
 always @(CK or E) begin
   if (!CK) begin
     e_lat = E;
