@@ -1,23 +1,15 @@
-/* verilator lint_off DECLFILENAME */
-/* verilator lint_off PROCASSINIT */
-/* verilator lint_off LATCH */
-
+`default_nettype none
+// Simulation-only, latch-based clock gate model. Use the SKY130 cell wrapper
+// in synthesis/implementation, not this file.
 module OPENROAD_CLKGATE (
-input  CK,
-input  E,
-output GCK
+    input  wire CK,
+    input  wire E,
+    output wire GCK
 );
-reg e_lat = 1'b0;
-
-always @(CK or E) begin
-  if (!CK) begin
-    e_lat = E;
-  end
-end
-
-assign GCK = CK & e_lat;
+    logic enable_latched;
+    always_latch begin
+        if (!CK) enable_latched = E;
+    end
+    assign GCK = CK & enable_latched;
 endmodule
-
-/* verilator lint_on LATCH */
-/* verilator lint_on PROCASSINIT */
-/* verilator lint_on DECLFILENAME */
+`default_nettype wire
