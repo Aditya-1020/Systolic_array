@@ -77,8 +77,4 @@ async def test_pe_against_golden(dut):
 
         expected_prod = next_prod
 
-    dut._log.info(
-        "PE test passed: %d vectors, seed=%d",
-        len(vectors),
-        SEED,
-    )
+    dut._log.info("PE test passed: %d vectors, seed=%d", len(vectors), SEED,)

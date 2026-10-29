@@ -1,7 +1,7 @@
 `default_nettype none
 module pe #(
     parameter int DW = 8,
-    parameter int ACC_W = 19
+    parameter int ACC_W = 24
 )(
     input wire i_clk_w,   // gated pulse on weight shift
     input wire i_clk_adv, // gated pulse on array advance
