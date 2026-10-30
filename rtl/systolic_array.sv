@@ -7,7 +7,7 @@ module systolic_array #(
 )(
     input wire i_clk,
     input wire i_rstn,
-    input wire signed [N*OUT_W-1:0] i_bias,
+    input logic signed [N*OUT_W-1:0] i_bias,
     input logic i_load_w,
     output logic o_busy,
     output logic o_done,
