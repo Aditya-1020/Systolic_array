@@ -1,6 +1,6 @@
 import random
 import cocotb
-from generic import pulse_clock, read_signed, write_signed, wrap_signed
+from helper.generic import pulse_clock, read_signed, write_signed, wrap_signed
 
 DW = 8
 ACC_W = 24
@@ -16,7 +16,6 @@ async def advance_pe(dut, activation, psum):
     write_signed(dut.i_psum, psum, ACC_W)
     await pulse_clock(dut.i_clk_adv)
 
-
 def generate_vectors(count=NUM_RANDOM_VECTORS, seed=SEED):
     rng = random.Random(seed)
     vectors = [
@@ -30,7 +29,6 @@ def generate_vectors(count=NUM_RANDOM_VECTORS, seed=SEED):
     ]
     vectors.extend((rng.randint(-128, 127), rng.randint(-128, 127), rng.randint(-(1 << (ACC_W - 1)), (1 << (ACC_W - 1)) - 1),) for _ in range(count))
     return vectors
-
 
 @cocotb.test()
 async def test_pe_against_golden(dut):
@@ -55,9 +53,7 @@ async def test_pe_against_golden(dut):
         await write_weight(dut, weight)
 
         actual_w = read_signed(dut.o_w)
-        assert actual_w == weight, (
-            f"Vector {index}: o_w expected {weight}, got {actual_w}"
-        )
+        assert actual_w == weight, (f"Vector {index}: o_w expected {weight}, got {actual_w}")
 
         expected_psum = wrap_signed(psum + expected_prod, ACC_W)
         next_prod = wrap_signed(activation * weight, 2 * DW)
@@ -67,14 +63,7 @@ async def test_pe_against_golden(dut):
         actual_a = read_signed(dut.o_a)
         actual_psum = read_signed(dut.o_psum)
 
-        assert actual_a == activation, (
-            f"Vector {index}: o_a expected {activation}, got {actual_a}"
-        )
-        assert actual_psum == expected_psum, (
-            f"Vector {index}: o_psum expected {expected_psum}, "
-            f"got {actual_psum}"
-        )
-
+        assert actual_a == activation, (f"Vector {index}: o_a expected {activation}, got {actual_a}")
+        assert actual_psum == expected_psum, (f"Vector {index}: o_psum expected {expected_psum}, " f"got {actual_psum}")
         expected_prod = next_prod
-
     dut._log.info("PE test passed: %d vectors, seed=%d", len(vectors), SEED,)
