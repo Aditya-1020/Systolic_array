@@ -1,3 +1,4 @@
+`default_nettype none
 module round #(
     parameter int W = 48,
     parameter int SHIFT_W = $clog2(W+1)

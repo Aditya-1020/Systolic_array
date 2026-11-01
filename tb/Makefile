@@ -15,7 +15,7 @@ FAKERAM := $(HELPER)/fakeram130_128x64.sv
 COCOTB_TOPLEVEL := $(TOPLEVEL)
 COCOTB_TEST_MODULES := $(MODULE)
 SIM_BUILD := $(TB_DIR)/sim_build_$(TOPLEVEL)
-EXTRA_ARGS += -Wall
+EXTRA_ARGS += -Wall --trace --trace-structs
 
 ifeq ($(TOPLEVEL),pe)
 VERILOG_SOURCES := $(PE_RTL)
@@ -61,6 +61,7 @@ include $(COCOTB_MAKEFILES)/Makefile.sim
 
 clean-up:
 	$(MAKE) -f $(TB_DIR)/clean.mk TOPLEVEL=$(TOPLEVEL)
+	rm -rf *.vcd
 
 list-sources:
 	@printf 'TOPLEVEL=%s MODULE=%s SIM=%s\n' '$(TOPLEVEL)' '$(MODULE)' '$(SIM)'

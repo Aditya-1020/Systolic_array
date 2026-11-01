@@ -1,0 +1,13 @@
+csr/sysarray_csr_pkg.sv
+csr/sysarray_csr.sv
+cells_clkgate.v
+pe.sv
+array.sv
+relu.sv
+round.sv
+saturate.sv
+requantize.sv
+postproc.sv
+systolic_array.sv
+dma_frontend.sv
+systolic_top.sv

@@ -51,8 +51,20 @@ def output_lanes(packed_data):
 async def reset_dut(dut):
     dut.i_clk.value = 0
     dut.i_rstn.value = 0
-    dut.i_bias.value = 0
+
+    dut.i_arr_en.value = 1
+    dut.i_auto_gate_en.value = 1
+    dut.i_start.value = 0
     dut.i_load_w.value = 0
+    dut.i_abort.value = 0
+    dut.i_soft_rst.value = 0
+
+    dut.i_relu_en.value = 0
+    dut.i_quant_en.value = 0
+    dut.i_mult.value = 1
+    dut.i_shift.value = 0
+    dut.i_bias.value = 0
+
     dut.s_axis_w_tvalid.value = 0
     dut.s_axis_w_tdata.value = 0
     dut.s_axis_a_tvalid.value = 0
@@ -98,6 +110,11 @@ async def prepare(dut, seed):
     dut.i_bias.value = pack_signed_lanes(biases, OUT_W)
     await request_weight_load(dut)
     await send_weight_rows(dut, weights)
+
+    dut.i_start.value = 1
+    await cycle(dut)
+    dut.i_start.value = 0
+
     return weights, biases
 
 async def send_activation(dut, activation, last=False):

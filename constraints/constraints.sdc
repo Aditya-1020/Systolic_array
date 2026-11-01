@@ -9,7 +9,6 @@ set rstn_port [get_ports i_rstn]
 
 create_clock -name clk -period $clk_period $clk_port
 
-# all inputs except the clock and async reset
 set data_inputs {}
 foreach p [all_inputs] {
     set n [get_property $p name]
@@ -21,8 +20,5 @@ foreach p [all_inputs] {
 set_false_path -from $rstn_port
 set_input_delay  $io_delay -clock clk $data_inputs
 set_output_delay $io_delay -clock clk [all_outputs]
-
-# set_clock_uncertainty -setup 0.2 [all_clocks]
-# set_clock_uncertainty -hold  0.1 [all_clocks]
 
 set_load 0.05 [all_outputs]
