@@ -1,139 +1,89 @@
 addrmap sysarray_csr {
     name = "Systolic array CSR";
+    desc = "10 registers. All data lives in on-chip WBUF/ABUF/RBUF; descriptors are beat indices, not byte addresses.";
     default regwidth = 32;
     default accesswidth = 32;
+
+    // Driven by hardware = BUSY. While high, datapath config fields ignore software writes.
+    signal { desc = "1 = array busy, config write-locked."; } cfg_lock;
 
     // ------------------------------------------------------------------
     // Execution control
     // ------------------------------------------------------------------
     reg {
         name = "COMMAND";
-        desc = "Write-1 command pulses, read as 0. SOFT_RESET > ABORT > LOAD_WEIGHTS/START. LOAD_WEIGHTS and START together -> CMD_ERR.";
+        desc = "Write-1 command pulses, read as 0. ABORT beats LOAD_W/START. LOAD_W + START together -> CMD_ERR.";
         default sw = w;
         default hw = r;
         default singlepulse = true;
-        field {desc = "Fetch bias (if BIAS_EN) and weights from memory into the array. Accepted only when idle.";} LOAD_WEIGHTS[0:0] = 0;
-        field {desc = "Stream ACT_COUNT activation rows from memory, write results to DST_ADDR. Needs WEIGHTS_LOADED, accepted only when idle.";} START[1:1] = 0;
-        field {desc = "Stop issuing requests, discard in-flight results. Keeps WEIGHTS_LOADED (unless it hit a weight load).";} ABORT[2:2] = 0;
-        field {desc = "ABORT + forget weights + clear control state. CSR config and ERROR_STATUS are kept.";} SOFT_RESET[3:3] = 0;
+        field {desc = "Load bias + weights from WBUF[WEIGHT_ADDR]. Idle only.";} LOAD_W[0:0] = 0;
+        field {desc = "Run ACT_COUNT rows from ABUF[ACT_ADDR], write results to RBUF[DST_ADDR]. Needs W_VALID. Idle only.";} START[1:1] = 0;
+        field {desc = "Stop now, drop in-flight rows. Keeps W_VALID unless a weight load was cut short.";} ABORT[2:2] = 0;
     } COMMAND @ 0x00;
 
     reg {
         name = "STATUS";
-        desc = "Live execution status. DONE is sticky: cleared by write-1, SOFT_RESET, or the next accepted START.";
-        field {sw = r; hw = w; desc = "Any work or memory transaction outstanding. Also high while a SOFT_RESET/ABORT flush finishes.";} BUSY[0:0];
-        field {sw = r; hw = w; desc = "Weights (and bias) resident in the array and valid.";} WEIGHTS_LOADED[1:1];
-        field {sw = r; hw = w; desc = "Activations in flight: from first row issued until last result written.";} COMPUTING[2:2];
-        field {sw = r; hw = w; desc = "Array frozen by output backpressure or memory wait (live level).";} STALLED[3:3];
-        field {sw = rw; hw = w; onwrite = woclr; hwclr = true; precedence = hw; intr; desc = "Last result row written AND its write response received. W1C. Hardware set wins over W1C; SOFT_RESET clears DONE.";} DONE[4:4] = 0;
+        desc = "BUSY/W_VALID are live. DONE/CMD_ERR/CFG_ERR are sticky, write-1-to-clear. Hardware set wins over W1C. DONE also clears on an accepted START.";
+        field {sw = r; hw = w; desc = "Load or run in progress.";} BUSY[0:0];
+        field {sw = r; hw = w; desc = "Bias + weights resident in the array.";} W_VALID[1:1];
+        field {sw = rw; hw = r; onwrite = woclr; hwset = true; hwclr = true; precedence = hw; desc = "Last result beat written to RBUF.";} DONE[2:2] = 0;
+        field {sw = rw; hw = r; onwrite = woclr; hwset = true; precedence = hw; desc = "Command rejected: illegal sequence (busy, START without W_VALID, LOAD_W+START).";} CMD_ERR[3:3] = 0;
+        field {sw = rw; hw = r; onwrite = woclr; hwset = true; precedence = hw; desc = "Command rejected: ACT_COUNT==0 or a range overruns its SRAM.";} CFG_ERR[4:4] = 0;
     } STATUS @ 0x04;
 
     reg {
-        name = "ERROR_STATUS";
-        desc = "Sticky error flags, W1C. Hardware events win over W1C. Preserved across command SOFT_RESET.";
-        default sw = rw;
-        default hw = w;
-        default onwrite = woclr;
-        default intr = true;
-        field {precedence = hw; desc = "Memory read response carried an error.";} READ_ERR[0:0] = 0;
-        field {precedence = hw; desc = "Memory write response carried an error.";} WRITE_ERR[1:1] = 0;
-        field {precedence = hw; desc = "Command rejected: ACT_COUNT==0 or misaligned base address.";} CFG_ERR[2:2] = 0;
-        field {precedence = hw; desc = "Command rejected: illegal sequence (START without weights, LOAD/START while busy, ARRAY_EN=0, LOAD+START together, any command during flush).";} CMD_ERR[3:3] = 0;
-    } ERROR_STATUS @ 0x08;
-
-    reg {
         name = "INT_ENABLE";
-        desc = "irq = (STATUS.DONE & DONE_IE) | (|ERROR_STATUS & ERROR_IE)";
+        desc = "irq = (DONE & DONE_IE) | ((CMD_ERR | CFG_ERR) & ERR_IE)";
         field {sw = rw; hw = r; desc = "Interrupt on DONE.";} DONE_IE[0:0] = 0;
-        field {sw = rw; hw = r; desc = "Interrupt on any error flag.";} ERROR_IE[1:1] = 0;
-    } INT_ENABLE @ 0x0C;
+        field {sw = rw; hw = r; desc = "Interrupt on CMD_ERR or CFG_ERR.";} ERR_IE[1:1] = 0;
+    } INT_ENABLE @ 0x08;
 
     // ------------------------------------------------------------------
-    // Array configuration
-    // ------------------------------------------------------------------
-    reg {
-        name = "ARRAY_CFG";
-        field {sw = rw; hw = r; desc = "Master enable. 0 = all datapath clock gates forced off (state retained), commands other than ABORT/SOFT_RESET -> CMD_ERR.";} ARRAY_EN[0:0] = 0;
-        field {sw = rw; hw = r; desc = "Layer-static. 1 = LOAD_WEIGHTS also fetches N per-column int32 biases from BIAS_ADDR. 0 = bias forced to 0.";} BIAS_EN[1:1] = 0;
-    } ARRAY_CFG @ 0x10;
-
-    reg {
-        name = "BIAS_ADDR";
-        desc = "Layer-static. Byte address of N little-endian int32 per-column biases. Must fit signed ACC_W bits. 8-byte aligned.";
-        field {sw = rw; hw = r;} ADDR[31:0] = 0;
-    } BIAS_ADDR @ 0x14;
-
-    // 0x18, 0x1C reserved
-
-    // ------------------------------------------------------------------
-    // Post-processing (run-static)
+    // Post-processing (write-locked while BUSY; these flops feed the datapath directly)
     // ------------------------------------------------------------------
     reg {
         name = "POSTPROC_CFG";
-        desc = "Orthogonal bits. 00 raw GEMM | 01 ReLU | 11 ReLU+requant | 10 requant only (logits layer). Requant path is always round-to-nearest + saturate.";
-        field {sw = rw; hw = r; desc = "ReLU on accumulator.";} RELU_EN[0:0] = 0;
-        field {sw = rw; hw = r; desc = "Multiply, shift/round, saturate to Q_W. Output lanes become int8 (sign-extended to OUT_W).";} REQUANT_EN[1:1] = 0;
-    } POSTPROC_CFG @ 0x20;
+        desc = "00 raw GEMM (int32 lanes, 4 beats/row) | 01 ReLU | 11 ReLU+requant | 10 requant only (int8 lanes, 1 beat/row).";
+        field {sw = rw; hw = r; swwel = cfg_lock; desc = "ReLU on accumulator.";} RELU_EN[0:0] = 0;
+        field {sw = rw; hw = r; swwel = cfg_lock; desc = "Multiply, shift/round, saturate to int8.";} REQUANT_EN[1:1] = 0;
+    } POSTPROC_CFG @ 0x0C;
 
     reg {
         name = "POSTPROC_MULT";
-        desc = "Unsigned fixed-point multiplier. Sized for MULT_W=16 (15 bits); wrapper slices to [MULT_W-2:0].";
-        field {sw = rw; hw = r;} MULT[14:0] = 0;
-    } POSTPROC_MULT @ 0x24;
+        desc = "Unsigned fixed-point multiplier (15 bits, MULT_W=16).";
+        field {sw = rw; hw = r; swwel = cfg_lock;} MULT[14:0] = 0;
+    } POSTPROC_MULT @ 0x10;
 
     reg {
         name = "POSTPROC_SHIFT";
-        desc = "Right shift after multiply. Sized for SHIFT_W=6; wrapper slices to [SHIFT_W-1:0].";
-        field {sw = rw; hw = r;} SHIFT[5:0] = 0;
-    } POSTPROC_SHIFT @ 0x28;
-
-    // 0x2C reserved
+        desc = "Right shift after multiply, round-to-nearest (6 bits, SHIFT_W=6).";
+        field {sw = rw; hw = r; swwel = cfg_lock;} SHIFT[5:0] = 0;
+    } POSTPROC_SHIFT @ 0x14;
 
     // ------------------------------------------------------------------
-    // Memory descriptors
+    // SRAM descriptors, in 64-bit beats. Sampled at command accept.
     // ------------------------------------------------------------------
     reg {
         name = "WEIGHT_ADDR";
-        desc = "Layer-static. Byte address of N rows of N int8 weights (row 0 first). 8-byte aligned.";
-        field {sw = rw; hw = r;} ADDR[31:0] = 0;
-    } WEIGHT_ADDR @ 0x30;
+        desc = "WBUF beat index of a weight block: 2 bias beats (8 x int16, lane 0 first) then 8 weight beats (row 0 first). WBUF is 256 beats.";
+        field {sw = rw; hw = r;} ADDR[7:0] = 0;
+    } WEIGHT_ADDR @ 0x18;
 
     reg {
         name = "ACT_ADDR";
-        desc = "Run-static. Byte address of activation rows, one row = N int8 = one 64-bit beat. 8-byte aligned.";
-        field {sw = rw; hw = r;} ADDR[31:0] = 0;
-    } ACT_ADDR @ 0x34;
-
-    reg {
-        name = "DST_ADDR";
-        desc = "Run-static. Byte address of result rows. Row size = N*OUT_W/8 bytes raw, N bytes if packed requant output is used. 8-byte aligned.";
-        field {sw = rw; hw = r;} ADDR[31:0] = 0;
-    } DST_ADDR @ 0x38;
+        desc = "ABUF beat index of first activation row (8 x int8 per beat). ABUF is 256 beats.";
+        field {sw = rw; hw = r;} ADDR[7:0] = 0;
+    } ACT_ADDR @ 0x1C;
 
     reg {
         name = "ACT_COUNT";
-        desc = "Run-static. Number of activation rows. 0 -> CFG_ERR.";
-        field {sw = rw; hw = r;} COUNT[31:0] = 0;
-    } ACT_COUNT @ 0x3C;
+        desc = "Number of activation rows, 1..256. 0 or overrun -> CFG_ERR.";
+        field {sw = rw; hw = r;} COUNT[8:0] = 0;
+    } ACT_COUNT @ 0x20;
 
-    // ------------------------------------------------------------------
-    // Low power
-    // ------------------------------------------------------------------
     reg {
-        name = "LP_CTRL";
-        field {
-            sw = rw;
-            hw = r;
-            desc = "1 = fine-grained clock gating (default). 0 = clk_pp follows array advance even when REQUANT_EN=0. clk_w and clk_adv stay gated. Debug only."; } AUTO_GATE_EN[0:0] = 1;
-        } LP_CTRL @ 0x40;
-    reg {
-        name = "LP_STATUS";
-        desc = "Live ICG enables. Read to see which domains are awake.";
-        default sw = r;
-        default hw = w;
-        field {desc = "Nothing in flight, no outstanding memory transactions. Safe to gate everything.";} IDLE[0:0];
-        field {desc = "Weight shift chain clock enabled.";} CLK_W_ON[1:1];
-        field {desc = "Array/skew/delay/valid-pipe clock enabled.";} CLK_ADV_ON[2:2];
-        field {desc = "Post-process pipeline clock enabled (off unless REQUANT_EN).";} CLK_PP_ON[3:3];
-    } LP_STATUS @ 0x44;
+        name = "DST_ADDR";
+        desc = "RBUF beat index of first result beat. Raw: 4 beats/row (lanes 2k,2k+1 in beat k). Requant: 1 beat/row. RBUF is 512 beats.";
+        field {sw = rw; hw = r;} ADDR[8:0] = 0;
+    } DST_ADDR @ 0x24;
 };
