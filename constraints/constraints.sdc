@@ -1,6 +1,7 @@
-current_design systolic_top
+# Timing constraints for accel_top (100 MHz / 10 ns on sky130).
+current_design accel_top
 
-set clk_period 10.0
+set clk_period 3.33
 set clk_io_pct 0.2
 set io_delay [expr {$clk_period * $clk_io_pct}]
 
@@ -18,7 +19,10 @@ foreach p [all_inputs] {
 }
 
 set_false_path -from $rstn_port
-set_input_delay  $io_delay -clock clk $data_inputs
-set_output_delay $io_delay -clock clk [all_outputs]
-
-set_load 0.05 [all_outputs]
+if {[llength $data_inputs] > 0} {
+    set_input_delay $io_delay -clock clk $data_inputs
+}
+if {[llength [all_outputs]] > 0} {
+    set_output_delay $io_delay -clock clk [all_outputs]
+    set_load 0.05 [all_outputs]
+}
