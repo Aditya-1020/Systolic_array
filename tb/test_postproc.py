@@ -17,13 +17,14 @@ def bypass(x: int, relu_en: int) -> int:
     return max(x, 0) if relu_en else x
 
 
-def quant_stage(x: int, m: int, s: int, relu_en: int, quant_en: int, q_w: int) -> int:
-    # value the 3-stage path produces for a vector captured with these controls
-    # (operands are isolated to 0 when quant_en=0 at capture time)
+def round_shift(prod: int, s: int) -> int:
+    return (prod + ((1 << s) >> 1)) >> s
+
+
+def stage1(x: int, m: int, relu_en: int, quant_en: int) -> int:
+    # operands are isolated to 0 when quant_en=0 at capture time
     v = bypass(x, relu_en) if quant_en else 0
-    prod = v * m
-    rnd = (prod + ((1 << s) >> 1)) >> s
-    return clamp(rnd, q_w)
+    return v * m
 
 
 def get_widths(dut):
@@ -75,8 +76,9 @@ async def run_plan(dut, plan, widths, q_w, errors):
     """plan: iterable of (x, m, s, relu_en, quant_en, en), one entry per cycle.
 
     quant_en=0 outputs are combinational (checked every cycle). quant_en=1
-    outputs come from the 3 stage registers; pipe[k] is the expected content
-    of stage register k+1 (None = unknown), updated only when en=1.
+    outputs come from the 3 stage registers; pipe = [prod_q, rounded_q, sat_q]
+    (None = unknown), updated only when en=1. i_shift is not registered: the
+    round stage uses the value live at the capturing edge.
     """
     acc_w, mult_bits, shift_w, out_w = widths
     pipe = [None] * LAT
@@ -91,7 +93,11 @@ async def run_plan(dut, plan, widths, q_w, errors):
         await tick(dut, en)
 
         if en:
-            pipe = [quant_stage(x, m, s, relu_en, quant_en, q_w)] + pipe[:-1]
+            pipe = [
+                stage1(x, m, relu_en, quant_en),
+                None if pipe[0] is None else round_shift(pipe[0], s),
+                None if pipe[1] is None else clamp(pipe[1], q_w),
+            ]
 
         exp = pipe[LAT - 1] if quant_en else bypass(x, relu_en)
         if exp is not None:

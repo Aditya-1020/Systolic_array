@@ -1,3 +1,4 @@
+// Simulation-only clock-gate model. Not for synthesis.
 `default_nettype none
 // Simulation-only, latch-based clock gate model. Use the SKY130 cell wrapper
 // in synthesis/implementation, not this file.
