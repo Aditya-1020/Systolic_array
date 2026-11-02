@@ -4,8 +4,8 @@
 package sysarray_csr_pkg;
 
     localparam SYSARRAY_CSR_DATA_WIDTH = 32;
-    localparam SYSARRAY_CSR_MIN_ADDR_WIDTH = 7;
-    localparam SYSARRAY_CSR_SIZE = 'h48;
+    localparam SYSARRAY_CSR_MIN_ADDR_WIDTH = 6;
+    localparam SYSARRAY_CSR_SIZE = 'h28;
 
     typedef struct {
         logic next;
@@ -13,84 +13,37 @@ package sysarray_csr_pkg;
 
     typedef struct {
         logic next;
-    } sysarray_csr__STATUS__WEIGHTS_LOADED__in_t;
+    } sysarray_csr__STATUS__W_VALID__in_t;
 
     typedef struct {
-        logic next;
-    } sysarray_csr__STATUS__COMPUTING__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__STATUS__STALLED__in_t;
-
-    typedef struct {
-        logic next;
         logic hwclr;
+        logic hwset;
     } sysarray_csr__STATUS__DONE__in_t;
 
     typedef struct {
+        logic hwset;
+    } sysarray_csr__STATUS__CMD_ERR__in_t;
+
+    typedef struct {
+        logic hwset;
+    } sysarray_csr__STATUS__CFG_ERR__in_t;
+
+    typedef struct {
         sysarray_csr__STATUS__BUSY__in_t BUSY;
-        sysarray_csr__STATUS__WEIGHTS_LOADED__in_t WEIGHTS_LOADED;
-        sysarray_csr__STATUS__COMPUTING__in_t COMPUTING;
-        sysarray_csr__STATUS__STALLED__in_t STALLED;
+        sysarray_csr__STATUS__W_VALID__in_t W_VALID;
         sysarray_csr__STATUS__DONE__in_t DONE;
+        sysarray_csr__STATUS__CMD_ERR__in_t CMD_ERR;
+        sysarray_csr__STATUS__CFG_ERR__in_t CFG_ERR;
     } sysarray_csr__STATUS__in_t;
 
     typedef struct {
-        logic next;
-    } sysarray_csr__ERROR_STATUS__READ_ERR__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__ERROR_STATUS__WRITE_ERR__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__ERROR_STATUS__CFG_ERR__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__ERROR_STATUS__CMD_ERR__in_t;
-
-    typedef struct {
-        sysarray_csr__ERROR_STATUS__READ_ERR__in_t READ_ERR;
-        sysarray_csr__ERROR_STATUS__WRITE_ERR__in_t WRITE_ERR;
-        sysarray_csr__ERROR_STATUS__CFG_ERR__in_t CFG_ERR;
-        sysarray_csr__ERROR_STATUS__CMD_ERR__in_t CMD_ERR;
-    } sysarray_csr__ERROR_STATUS__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__LP_STATUS__IDLE__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__LP_STATUS__CLK_W_ON__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__LP_STATUS__CLK_ADV_ON__in_t;
-
-    typedef struct {
-        logic next;
-    } sysarray_csr__LP_STATUS__CLK_PP_ON__in_t;
-
-    typedef struct {
-        sysarray_csr__LP_STATUS__IDLE__in_t IDLE;
-        sysarray_csr__LP_STATUS__CLK_W_ON__in_t CLK_W_ON;
-        sysarray_csr__LP_STATUS__CLK_ADV_ON__in_t CLK_ADV_ON;
-        sysarray_csr__LP_STATUS__CLK_PP_ON__in_t CLK_PP_ON;
-    } sysarray_csr__LP_STATUS__in_t;
-
-    typedef struct {
+        logic cfg_lock;
         sysarray_csr__STATUS__in_t STATUS;
-        sysarray_csr__ERROR_STATUS__in_t ERROR_STATUS;
-        sysarray_csr__LP_STATUS__in_t LP_STATUS;
     } sysarray_csr__in_t;
 
     typedef struct {
         logic value;
-    } sysarray_csr__COMMAND__LOAD_WEIGHTS__out_t;
+    } sysarray_csr__COMMAND__LOAD_W__out_t;
 
     typedef struct {
         logic value;
@@ -101,23 +54,28 @@ package sysarray_csr_pkg;
     } sysarray_csr__COMMAND__ABORT__out_t;
 
     typedef struct {
-        logic value;
-    } sysarray_csr__COMMAND__SOFT_RESET__out_t;
-
-    typedef struct {
-        sysarray_csr__COMMAND__LOAD_WEIGHTS__out_t LOAD_WEIGHTS;
+        sysarray_csr__COMMAND__LOAD_W__out_t LOAD_W;
         sysarray_csr__COMMAND__START__out_t START;
         sysarray_csr__COMMAND__ABORT__out_t ABORT;
-        sysarray_csr__COMMAND__SOFT_RESET__out_t SOFT_RESET;
     } sysarray_csr__COMMAND__out_t;
 
     typedef struct {
-        logic intr;
-    } sysarray_csr__STATUS__out_t;
+        logic value;
+    } sysarray_csr__STATUS__DONE__out_t;
 
     typedef struct {
-        logic intr;
-    } sysarray_csr__ERROR_STATUS__out_t;
+        logic value;
+    } sysarray_csr__STATUS__CMD_ERR__out_t;
+
+    typedef struct {
+        logic value;
+    } sysarray_csr__STATUS__CFG_ERR__out_t;
+
+    typedef struct {
+        sysarray_csr__STATUS__DONE__out_t DONE;
+        sysarray_csr__STATUS__CMD_ERR__out_t CMD_ERR;
+        sysarray_csr__STATUS__CFG_ERR__out_t CFG_ERR;
+    } sysarray_csr__STATUS__out_t;
 
     typedef struct {
         logic value;
@@ -125,33 +83,12 @@ package sysarray_csr_pkg;
 
     typedef struct {
         logic value;
-    } sysarray_csr__INT_ENABLE__ERROR_IE__out_t;
+    } sysarray_csr__INT_ENABLE__ERR_IE__out_t;
 
     typedef struct {
         sysarray_csr__INT_ENABLE__DONE_IE__out_t DONE_IE;
-        sysarray_csr__INT_ENABLE__ERROR_IE__out_t ERROR_IE;
+        sysarray_csr__INT_ENABLE__ERR_IE__out_t ERR_IE;
     } sysarray_csr__INT_ENABLE__out_t;
-
-    typedef struct {
-        logic value;
-    } sysarray_csr__ARRAY_CFG__ARRAY_EN__out_t;
-
-    typedef struct {
-        logic value;
-    } sysarray_csr__ARRAY_CFG__BIAS_EN__out_t;
-
-    typedef struct {
-        sysarray_csr__ARRAY_CFG__ARRAY_EN__out_t ARRAY_EN;
-        sysarray_csr__ARRAY_CFG__BIAS_EN__out_t BIAS_EN;
-    } sysarray_csr__ARRAY_CFG__out_t;
-
-    typedef struct {
-        logic [31:0] value;
-    } sysarray_csr__BIAS_ADDR__ADDR__out_t;
-
-    typedef struct {
-        sysarray_csr__BIAS_ADDR__ADDR__out_t ADDR;
-    } sysarray_csr__BIAS_ADDR__out_t;
 
     typedef struct {
         logic value;
@@ -183,7 +120,7 @@ package sysarray_csr_pkg;
     } sysarray_csr__POSTPROC_SHIFT__out_t;
 
     typedef struct {
-        logic [31:0] value;
+        logic [7:0] value;
     } sysarray_csr__WEIGHT_ADDR__ADDR__out_t;
 
     typedef struct {
@@ -191,7 +128,7 @@ package sysarray_csr_pkg;
     } sysarray_csr__WEIGHT_ADDR__out_t;
 
     typedef struct {
-        logic [31:0] value;
+        logic [7:0] value;
     } sysarray_csr__ACT_ADDR__ADDR__out_t;
 
     typedef struct {
@@ -199,15 +136,7 @@ package sysarray_csr_pkg;
     } sysarray_csr__ACT_ADDR__out_t;
 
     typedef struct {
-        logic [31:0] value;
-    } sysarray_csr__DST_ADDR__ADDR__out_t;
-
-    typedef struct {
-        sysarray_csr__DST_ADDR__ADDR__out_t ADDR;
-    } sysarray_csr__DST_ADDR__out_t;
-
-    typedef struct {
-        logic [31:0] value;
+        logic [8:0] value;
     } sysarray_csr__ACT_COUNT__COUNT__out_t;
 
     typedef struct {
@@ -215,27 +144,23 @@ package sysarray_csr_pkg;
     } sysarray_csr__ACT_COUNT__out_t;
 
     typedef struct {
-        logic value;
-    } sysarray_csr__LP_CTRL__AUTO_GATE_EN__out_t;
+        logic [8:0] value;
+    } sysarray_csr__DST_ADDR__ADDR__out_t;
 
     typedef struct {
-        sysarray_csr__LP_CTRL__AUTO_GATE_EN__out_t AUTO_GATE_EN;
-    } sysarray_csr__LP_CTRL__out_t;
+        sysarray_csr__DST_ADDR__ADDR__out_t ADDR;
+    } sysarray_csr__DST_ADDR__out_t;
 
     typedef struct {
         sysarray_csr__COMMAND__out_t COMMAND;
         sysarray_csr__STATUS__out_t STATUS;
-        sysarray_csr__ERROR_STATUS__out_t ERROR_STATUS;
         sysarray_csr__INT_ENABLE__out_t INT_ENABLE;
-        sysarray_csr__ARRAY_CFG__out_t ARRAY_CFG;
-        sysarray_csr__BIAS_ADDR__out_t BIAS_ADDR;
         sysarray_csr__POSTPROC_CFG__out_t POSTPROC_CFG;
         sysarray_csr__POSTPROC_MULT__out_t POSTPROC_MULT;
         sysarray_csr__POSTPROC_SHIFT__out_t POSTPROC_SHIFT;
         sysarray_csr__WEIGHT_ADDR__out_t WEIGHT_ADDR;
         sysarray_csr__ACT_ADDR__out_t ACT_ADDR;
-        sysarray_csr__DST_ADDR__out_t DST_ADDR;
         sysarray_csr__ACT_COUNT__out_t ACT_COUNT;
-        sysarray_csr__LP_CTRL__out_t LP_CTRL;
+        sysarray_csr__DST_ADDR__out_t DST_ADDR;
     } sysarray_csr__out_t;
 endpackage

@@ -8,6 +8,7 @@ round.sv
 saturate.sv
 requantize.sv
 postproc.sv
-systolic_array.sv
-dma_frontend.sv
+systolic_core.sv
+systolic_ctrl.sv
 systolic_top.sv
+accel_top.sv

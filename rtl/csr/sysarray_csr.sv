@@ -5,7 +5,16 @@ module sysarray_csr (
         input wire clk,
         input wire rst,
 
-        apb3_intf.slave s_apb,
+        input wire s_apb_psel,
+        input wire s_apb_penable,
+        input wire s_apb_pwrite,
+        input wire [2:0] s_apb_pprot,
+        input wire [5:0] s_apb_paddr,
+        input wire [31:0] s_apb_pwdata,
+        input wire [3:0] s_apb_pstrb,
+        output logic s_apb_pready,
+        output logic [31:0] s_apb_prdata,
+        output logic s_apb_pslverr,
 
         input sysarray_csr_pkg::sysarray_csr__in_t hwif_in,
         output sysarray_csr_pkg::sysarray_csr__out_t hwif_out
@@ -16,7 +25,7 @@ module sysarray_csr (
     //--------------------------------------------------------------------------
     logic cpuif_req;
     logic cpuif_req_is_wr;
-    logic [6:0] cpuif_addr;
+    logic [5:0] cpuif_addr;
     logic [31:0] cpuif_wr_data;
     logic [31:0] cpuif_wr_biten;
     logic cpuif_req_stall_wr;
@@ -29,15 +38,6 @@ module sysarray_csr (
     logic cpuif_wr_ack;
     logic cpuif_wr_err;
 
-    `ifndef SYNTHESIS
-        initial begin
-            assert_bad_addr_width: assert($bits(s_apb.PADDR) >= sysarray_csr_pkg::SYSARRAY_CSR_MIN_ADDR_WIDTH)
-                else $error("Interface address width of %0d is too small. Shall be at least %0d bits", $bits(s_apb.PADDR), sysarray_csr_pkg::SYSARRAY_CSR_MIN_ADDR_WIDTH);
-            assert_bad_data_width: assert($bits(s_apb.PWDATA) == sysarray_csr_pkg::SYSARRAY_CSR_DATA_WIDTH)
-                else $error("Interface data width of %0d is incorrect. Shall be %0d bits", $bits(s_apb.PWDATA), sysarray_csr_pkg::SYSARRAY_CSR_DATA_WIDTH);
-        end
-    `endif
-
     // Request
     logic is_active;
     always_ff @(posedge clk) begin
@@ -47,14 +47,18 @@ module sysarray_csr (
             cpuif_req_is_wr <= '0;
             cpuif_addr <= '0;
             cpuif_wr_data <= '0;
+            cpuif_wr_biten <= '0;
         end else begin
             if(~is_active) begin
-                if(s_apb.PSEL) begin
+                if(s_apb_psel) begin
                     is_active <= '1;
                     cpuif_req <= '1;
-                    cpuif_req_is_wr <= s_apb.PWRITE;
-                    cpuif_addr <= {s_apb.PADDR[6:2], 2'b0};
-                    cpuif_wr_data <= s_apb.PWDATA;
+                    cpuif_req_is_wr <= s_apb_pwrite;
+                    cpuif_addr <= {s_apb_paddr[5:2], 2'b0};
+                    cpuif_wr_data <= s_apb_pwdata;
+                    for(int i=0; i<4; i++) begin
+                        cpuif_wr_biten[i*8 +: 8] <= {8{s_apb_pstrb[i]}};
+                    end
                 end
             end else begin
                 cpuif_req <= '0;
@@ -64,12 +68,11 @@ module sysarray_csr (
             end
         end
     end
-    assign cpuif_wr_biten = '1;
 
     // Response
-    assign s_apb.PREADY = cpuif_rd_ack | cpuif_wr_ack;
-    assign s_apb.PRDATA = cpuif_rd_data;
-    assign s_apb.PSLVERR = cpuif_rd_err | cpuif_wr_err;
+    assign s_apb_pready = cpuif_rd_ack | cpuif_wr_ack;
+    assign s_apb_prdata = cpuif_rd_data;
+    assign s_apb_pslverr = cpuif_rd_err | cpuif_wr_err;
 
     logic cpuif_req_masked;
 
@@ -86,23 +89,18 @@ module sysarray_csr (
     typedef struct {
         logic COMMAND;
         logic STATUS;
-        logic ERROR_STATUS;
         logic INT_ENABLE;
-        logic ARRAY_CFG;
-        logic BIAS_ADDR;
         logic POSTPROC_CFG;
         logic POSTPROC_MULT;
         logic POSTPROC_SHIFT;
         logic WEIGHT_ADDR;
         logic ACT_ADDR;
-        logic DST_ADDR;
         logic ACT_COUNT;
-        logic LP_CTRL;
-        logic LP_STATUS;
+        logic DST_ADDR;
     } decoded_reg_strb_t;
     decoded_reg_strb_t decoded_reg_strb;
     logic decoded_err;
-    logic [6:0] decoded_addr;
+    logic [5:0] decoded_addr;
     logic decoded_req;
     logic decoded_req_is_wr;
     logic [31:0] decoded_wr_data;
@@ -113,21 +111,16 @@ module sysarray_csr (
         automatic logic is_valid_rw;
         is_valid_addr = '1; // No valid address check
         is_valid_rw = '1; // No valid RW check
-        decoded_reg_strb.COMMAND = cpuif_req_masked & (cpuif_addr == 7'h0) & cpuif_req_is_wr;
-        decoded_reg_strb.STATUS = cpuif_req_masked & (cpuif_addr == 7'h4);
-        decoded_reg_strb.ERROR_STATUS = cpuif_req_masked & (cpuif_addr == 7'h8);
-        decoded_reg_strb.INT_ENABLE = cpuif_req_masked & (cpuif_addr == 7'hc);
-        decoded_reg_strb.ARRAY_CFG = cpuif_req_masked & (cpuif_addr == 7'h10);
-        decoded_reg_strb.BIAS_ADDR = cpuif_req_masked & (cpuif_addr == 7'h14);
-        decoded_reg_strb.POSTPROC_CFG = cpuif_req_masked & (cpuif_addr == 7'h20);
-        decoded_reg_strb.POSTPROC_MULT = cpuif_req_masked & (cpuif_addr == 7'h24);
-        decoded_reg_strb.POSTPROC_SHIFT = cpuif_req_masked & (cpuif_addr == 7'h28);
-        decoded_reg_strb.WEIGHT_ADDR = cpuif_req_masked & (cpuif_addr == 7'h30);
-        decoded_reg_strb.ACT_ADDR = cpuif_req_masked & (cpuif_addr == 7'h34);
-        decoded_reg_strb.DST_ADDR = cpuif_req_masked & (cpuif_addr == 7'h38);
-        decoded_reg_strb.ACT_COUNT = cpuif_req_masked & (cpuif_addr == 7'h3c);
-        decoded_reg_strb.LP_CTRL = cpuif_req_masked & (cpuif_addr == 7'h40);
-        decoded_reg_strb.LP_STATUS = cpuif_req_masked & (cpuif_addr == 7'h44) & !cpuif_req_is_wr;
+        decoded_reg_strb.COMMAND = cpuif_req_masked & (cpuif_addr == 6'h0) & cpuif_req_is_wr;
+        decoded_reg_strb.STATUS = cpuif_req_masked & (cpuif_addr == 6'h4);
+        decoded_reg_strb.INT_ENABLE = cpuif_req_masked & (cpuif_addr == 6'h8);
+        decoded_reg_strb.POSTPROC_CFG = cpuif_req_masked & (cpuif_addr == 6'hc);
+        decoded_reg_strb.POSTPROC_MULT = cpuif_req_masked & (cpuif_addr == 6'h10);
+        decoded_reg_strb.POSTPROC_SHIFT = cpuif_req_masked & (cpuif_addr == 6'h14);
+        decoded_reg_strb.WEIGHT_ADDR = cpuif_req_masked & (cpuif_addr == 6'h18);
+        decoded_reg_strb.ACT_ADDR = cpuif_req_masked & (cpuif_addr == 6'h1c);
+        decoded_reg_strb.ACT_COUNT = cpuif_req_masked & (cpuif_addr == 6'h20);
+        decoded_reg_strb.DST_ADDR = cpuif_req_masked & (cpuif_addr == 6'h24);
         decoded_err = '0;
     end
 
@@ -146,7 +139,7 @@ module sysarray_csr (
             struct {
                 logic next;
                 logic load_next;
-            } LOAD_WEIGHTS;
+            } LOAD_W;
             struct {
                 logic next;
                 logic load_next;
@@ -155,35 +148,21 @@ module sysarray_csr (
                 logic next;
                 logic load_next;
             } ABORT;
-            struct {
-                logic next;
-                logic load_next;
-            } SOFT_RESET;
         } COMMAND;
         struct {
             struct {
                 logic next;
                 logic load_next;
             } DONE;
-        } STATUS;
-        struct {
-            struct {
-                logic next;
-                logic load_next;
-            } READ_ERR;
-            struct {
-                logic next;
-                logic load_next;
-            } WRITE_ERR;
-            struct {
-                logic next;
-                logic load_next;
-            } CFG_ERR;
             struct {
                 logic next;
                 logic load_next;
             } CMD_ERR;
-        } ERROR_STATUS;
+            struct {
+                logic next;
+                logic load_next;
+            } CFG_ERR;
+        } STATUS;
         struct {
             struct {
                 logic next;
@@ -192,24 +171,8 @@ module sysarray_csr (
             struct {
                 logic next;
                 logic load_next;
-            } ERROR_IE;
+            } ERR_IE;
         } INT_ENABLE;
-        struct {
-            struct {
-                logic next;
-                logic load_next;
-            } ARRAY_EN;
-            struct {
-                logic next;
-                logic load_next;
-            } BIAS_EN;
-        } ARRAY_CFG;
-        struct {
-            struct {
-                logic [31:0] next;
-                logic load_next;
-            } ADDR;
-        } BIAS_ADDR;
         struct {
             struct {
                 logic next;
@@ -234,34 +197,28 @@ module sysarray_csr (
         } POSTPROC_SHIFT;
         struct {
             struct {
-                logic [31:0] next;
+                logic [7:0] next;
                 logic load_next;
             } ADDR;
         } WEIGHT_ADDR;
         struct {
             struct {
-                logic [31:0] next;
+                logic [7:0] next;
                 logic load_next;
             } ADDR;
         } ACT_ADDR;
         struct {
             struct {
-                logic [31:0] next;
-                logic load_next;
-            } ADDR;
-        } DST_ADDR;
-        struct {
-            struct {
-                logic [31:0] next;
+                logic [8:0] next;
                 logic load_next;
             } COUNT;
         } ACT_COUNT;
         struct {
             struct {
-                logic next;
+                logic [8:0] next;
                 logic load_next;
-            } AUTO_GATE_EN;
-        } LP_CTRL;
+            } ADDR;
+        } DST_ADDR;
     } field_combo_t;
     field_combo_t field_combo;
 
@@ -269,57 +226,33 @@ module sysarray_csr (
         struct {
             struct {
                 logic value;
-            } LOAD_WEIGHTS;
+            } LOAD_W;
             struct {
                 logic value;
             } START;
             struct {
                 logic value;
             } ABORT;
-            struct {
-                logic value;
-            } SOFT_RESET;
         } COMMAND;
         struct {
             struct {
                 logic value;
             } DONE;
-        } STATUS;
-        struct {
-            struct {
-                logic value;
-            } READ_ERR;
-            struct {
-                logic value;
-            } WRITE_ERR;
-            struct {
-                logic value;
-            } CFG_ERR;
             struct {
                 logic value;
             } CMD_ERR;
-        } ERROR_STATUS;
+            struct {
+                logic value;
+            } CFG_ERR;
+        } STATUS;
         struct {
             struct {
                 logic value;
             } DONE_IE;
             struct {
                 logic value;
-            } ERROR_IE;
+            } ERR_IE;
         } INT_ENABLE;
-        struct {
-            struct {
-                logic value;
-            } ARRAY_EN;
-            struct {
-                logic value;
-            } BIAS_EN;
-        } ARRAY_CFG;
-        struct {
-            struct {
-                logic [31:0] value;
-            } ADDR;
-        } BIAS_ADDR;
         struct {
             struct {
                 logic value;
@@ -340,58 +273,53 @@ module sysarray_csr (
         } POSTPROC_SHIFT;
         struct {
             struct {
-                logic [31:0] value;
+                logic [7:0] value;
             } ADDR;
         } WEIGHT_ADDR;
         struct {
             struct {
-                logic [31:0] value;
+                logic [7:0] value;
             } ADDR;
         } ACT_ADDR;
         struct {
             struct {
-                logic [31:0] value;
-            } ADDR;
-        } DST_ADDR;
-        struct {
-            struct {
-                logic [31:0] value;
+                logic [8:0] value;
             } COUNT;
         } ACT_COUNT;
         struct {
             struct {
-                logic value;
-            } AUTO_GATE_EN;
-        } LP_CTRL;
+                logic [8:0] value;
+            } ADDR;
+        } DST_ADDR;
     } field_storage_t;
     field_storage_t field_storage;
 
-    // Field: sysarray_csr.COMMAND.LOAD_WEIGHTS
+    // Field: sysarray_csr.COMMAND.LOAD_W
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
-        next_c = field_storage.COMMAND.LOAD_WEIGHTS.value;
+        next_c = field_storage.COMMAND.LOAD_W.value;
         load_next_c = '0;
         if(decoded_reg_strb.COMMAND && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.COMMAND.LOAD_WEIGHTS.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
+            next_c = (field_storage.COMMAND.LOAD_W.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
             load_next_c = '1;
         end else begin // singlepulse clears back to 0
             next_c = '0;
             load_next_c = '1;
         end
-        field_combo.COMMAND.LOAD_WEIGHTS.next = next_c;
-        field_combo.COMMAND.LOAD_WEIGHTS.load_next = load_next_c;
+        field_combo.COMMAND.LOAD_W.next = next_c;
+        field_combo.COMMAND.LOAD_W.load_next = load_next_c;
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.COMMAND.LOAD_WEIGHTS.value <= 1'h0;
+            field_storage.COMMAND.LOAD_W.value <= 1'h0;
         end else begin
-            if(field_combo.COMMAND.LOAD_WEIGHTS.load_next) begin
-                field_storage.COMMAND.LOAD_WEIGHTS.value <= field_combo.COMMAND.LOAD_WEIGHTS.next;
+            if(field_combo.COMMAND.LOAD_W.load_next) begin
+                field_storage.COMMAND.LOAD_W.value <= field_combo.COMMAND.LOAD_W.next;
             end
         end
     end
-    assign hwif_out.COMMAND.LOAD_WEIGHTS.value = field_storage.COMMAND.LOAD_WEIGHTS.value;
+    assign hwif_out.COMMAND.LOAD_W.value = field_storage.COMMAND.LOAD_W.value;
     // Field: sysarray_csr.COMMAND.START
     always_comb begin
         automatic logic [0:0] next_c;
@@ -444,46 +372,20 @@ module sysarray_csr (
         end
     end
     assign hwif_out.COMMAND.ABORT.value = field_storage.COMMAND.ABORT.value;
-    // Field: sysarray_csr.COMMAND.SOFT_RESET
-    always_comb begin
-        automatic logic [0:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.COMMAND.SOFT_RESET.value;
-        load_next_c = '0;
-        if(decoded_reg_strb.COMMAND && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.COMMAND.SOFT_RESET.value & ~decoded_wr_biten[3:3]) | (decoded_wr_data[3:3] & decoded_wr_biten[3:3]);
-            load_next_c = '1;
-        end else begin // singlepulse clears back to 0
-            next_c = '0;
-            load_next_c = '1;
-        end
-        field_combo.COMMAND.SOFT_RESET.next = next_c;
-        field_combo.COMMAND.SOFT_RESET.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.COMMAND.SOFT_RESET.value <= 1'h0;
-        end else begin
-            if(field_combo.COMMAND.SOFT_RESET.load_next) begin
-                field_storage.COMMAND.SOFT_RESET.value <= field_combo.COMMAND.SOFT_RESET.next;
-            end
-        end
-    end
-    assign hwif_out.COMMAND.SOFT_RESET.value = field_storage.COMMAND.SOFT_RESET.value;
     // Field: sysarray_csr.STATUS.DONE
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
         next_c = field_storage.STATUS.DONE.value;
         load_next_c = '0;
-        if(hwif_in.STATUS.DONE.next) begin // stickybit
+        if(hwif_in.STATUS.DONE.hwset) begin // HW Set
             next_c = '1;
             load_next_c = '1;
         end else if(hwif_in.STATUS.DONE.hwclr) begin // HW Clear
             next_c = '0;
             load_next_c = '1;
         end else if(decoded_reg_strb.STATUS && decoded_req_is_wr) begin // SW write 1 clear
-            next_c = field_storage.STATUS.DONE.value & ~(decoded_wr_data[4:4] & decoded_wr_biten[4:4]);
+            next_c = field_storage.STATUS.DONE.value & ~(decoded_wr_data[2:2] & decoded_wr_biten[2:2]);
             load_next_c = '1;
         end
         field_combo.STATUS.DONE.next = next_c;
@@ -498,113 +400,59 @@ module sysarray_csr (
             end
         end
     end
-    assign hwif_out.STATUS.intr =
-        |field_storage.STATUS.DONE.value;
-    // Field: sysarray_csr.ERROR_STATUS.READ_ERR
+    assign hwif_out.STATUS.DONE.value = field_storage.STATUS.DONE.value;
+    // Field: sysarray_csr.STATUS.CMD_ERR
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
-        next_c = field_storage.ERROR_STATUS.READ_ERR.value;
+        next_c = field_storage.STATUS.CMD_ERR.value;
         load_next_c = '0;
-        if(hwif_in.ERROR_STATUS.READ_ERR.next) begin // stickybit
+        if(hwif_in.STATUS.CMD_ERR.hwset) begin // HW Set
             next_c = '1;
             load_next_c = '1;
-        end else if(decoded_reg_strb.ERROR_STATUS && decoded_req_is_wr) begin // SW write 1 clear
-            next_c = field_storage.ERROR_STATUS.READ_ERR.value & ~(decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
+        end else if(decoded_reg_strb.STATUS && decoded_req_is_wr) begin // SW write 1 clear
+            next_c = field_storage.STATUS.CMD_ERR.value & ~(decoded_wr_data[3:3] & decoded_wr_biten[3:3]);
             load_next_c = '1;
         end
-        field_combo.ERROR_STATUS.READ_ERR.next = next_c;
-        field_combo.ERROR_STATUS.READ_ERR.load_next = load_next_c;
+        field_combo.STATUS.CMD_ERR.next = next_c;
+        field_combo.STATUS.CMD_ERR.load_next = load_next_c;
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.ERROR_STATUS.READ_ERR.value <= 1'h0;
+            field_storage.STATUS.CMD_ERR.value <= 1'h0;
         end else begin
-            if(field_combo.ERROR_STATUS.READ_ERR.load_next) begin
-                field_storage.ERROR_STATUS.READ_ERR.value <= field_combo.ERROR_STATUS.READ_ERR.next;
+            if(field_combo.STATUS.CMD_ERR.load_next) begin
+                field_storage.STATUS.CMD_ERR.value <= field_combo.STATUS.CMD_ERR.next;
             end
         end
     end
-    // Field: sysarray_csr.ERROR_STATUS.WRITE_ERR
+    assign hwif_out.STATUS.CMD_ERR.value = field_storage.STATUS.CMD_ERR.value;
+    // Field: sysarray_csr.STATUS.CFG_ERR
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
-        next_c = field_storage.ERROR_STATUS.WRITE_ERR.value;
+        next_c = field_storage.STATUS.CFG_ERR.value;
         load_next_c = '0;
-        if(hwif_in.ERROR_STATUS.WRITE_ERR.next) begin // stickybit
+        if(hwif_in.STATUS.CFG_ERR.hwset) begin // HW Set
             next_c = '1;
             load_next_c = '1;
-        end else if(decoded_reg_strb.ERROR_STATUS && decoded_req_is_wr) begin // SW write 1 clear
-            next_c = field_storage.ERROR_STATUS.WRITE_ERR.value & ~(decoded_wr_data[1:1] & decoded_wr_biten[1:1]);
+        end else if(decoded_reg_strb.STATUS && decoded_req_is_wr) begin // SW write 1 clear
+            next_c = field_storage.STATUS.CFG_ERR.value & ~(decoded_wr_data[4:4] & decoded_wr_biten[4:4]);
             load_next_c = '1;
         end
-        field_combo.ERROR_STATUS.WRITE_ERR.next = next_c;
-        field_combo.ERROR_STATUS.WRITE_ERR.load_next = load_next_c;
+        field_combo.STATUS.CFG_ERR.next = next_c;
+        field_combo.STATUS.CFG_ERR.load_next = load_next_c;
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.ERROR_STATUS.WRITE_ERR.value <= 1'h0;
+            field_storage.STATUS.CFG_ERR.value <= 1'h0;
         end else begin
-            if(field_combo.ERROR_STATUS.WRITE_ERR.load_next) begin
-                field_storage.ERROR_STATUS.WRITE_ERR.value <= field_combo.ERROR_STATUS.WRITE_ERR.next;
+            if(field_combo.STATUS.CFG_ERR.load_next) begin
+                field_storage.STATUS.CFG_ERR.value <= field_combo.STATUS.CFG_ERR.next;
             end
         end
     end
-    // Field: sysarray_csr.ERROR_STATUS.CFG_ERR
-    always_comb begin
-        automatic logic [0:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.ERROR_STATUS.CFG_ERR.value;
-        load_next_c = '0;
-        if(hwif_in.ERROR_STATUS.CFG_ERR.next) begin // stickybit
-            next_c = '1;
-            load_next_c = '1;
-        end else if(decoded_reg_strb.ERROR_STATUS && decoded_req_is_wr) begin // SW write 1 clear
-            next_c = field_storage.ERROR_STATUS.CFG_ERR.value & ~(decoded_wr_data[2:2] & decoded_wr_biten[2:2]);
-            load_next_c = '1;
-        end
-        field_combo.ERROR_STATUS.CFG_ERR.next = next_c;
-        field_combo.ERROR_STATUS.CFG_ERR.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.ERROR_STATUS.CFG_ERR.value <= 1'h0;
-        end else begin
-            if(field_combo.ERROR_STATUS.CFG_ERR.load_next) begin
-                field_storage.ERROR_STATUS.CFG_ERR.value <= field_combo.ERROR_STATUS.CFG_ERR.next;
-            end
-        end
-    end
-    // Field: sysarray_csr.ERROR_STATUS.CMD_ERR
-    always_comb begin
-        automatic logic [0:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.ERROR_STATUS.CMD_ERR.value;
-        load_next_c = '0;
-        if(hwif_in.ERROR_STATUS.CMD_ERR.next) begin // stickybit
-            next_c = '1;
-            load_next_c = '1;
-        end else if(decoded_reg_strb.ERROR_STATUS && decoded_req_is_wr) begin // SW write 1 clear
-            next_c = field_storage.ERROR_STATUS.CMD_ERR.value & ~(decoded_wr_data[3:3] & decoded_wr_biten[3:3]);
-            load_next_c = '1;
-        end
-        field_combo.ERROR_STATUS.CMD_ERR.next = next_c;
-        field_combo.ERROR_STATUS.CMD_ERR.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.ERROR_STATUS.CMD_ERR.value <= 1'h0;
-        end else begin
-            if(field_combo.ERROR_STATUS.CMD_ERR.load_next) begin
-                field_storage.ERROR_STATUS.CMD_ERR.value <= field_combo.ERROR_STATUS.CMD_ERR.next;
-            end
-        end
-    end
-    assign hwif_out.ERROR_STATUS.intr =
-        |field_storage.ERROR_STATUS.READ_ERR.value
-        || |field_storage.ERROR_STATUS.WRITE_ERR.value
-        || |field_storage.ERROR_STATUS.CFG_ERR.value
-        || |field_storage.ERROR_STATUS.CMD_ERR.value;
+    assign hwif_out.STATUS.CFG_ERR.value = field_storage.STATUS.CFG_ERR.value;
     // Field: sysarray_csr.INT_ENABLE.DONE_IE
     always_comb begin
         automatic logic [0:0] next_c;
@@ -628,105 +476,36 @@ module sysarray_csr (
         end
     end
     assign hwif_out.INT_ENABLE.DONE_IE.value = field_storage.INT_ENABLE.DONE_IE.value;
-    // Field: sysarray_csr.INT_ENABLE.ERROR_IE
+    // Field: sysarray_csr.INT_ENABLE.ERR_IE
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
-        next_c = field_storage.INT_ENABLE.ERROR_IE.value;
+        next_c = field_storage.INT_ENABLE.ERR_IE.value;
         load_next_c = '0;
         if(decoded_reg_strb.INT_ENABLE && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.INT_ENABLE.ERROR_IE.value & ~decoded_wr_biten[1:1]) | (decoded_wr_data[1:1] & decoded_wr_biten[1:1]);
+            next_c = (field_storage.INT_ENABLE.ERR_IE.value & ~decoded_wr_biten[1:1]) | (decoded_wr_data[1:1] & decoded_wr_biten[1:1]);
             load_next_c = '1;
         end
-        field_combo.INT_ENABLE.ERROR_IE.next = next_c;
-        field_combo.INT_ENABLE.ERROR_IE.load_next = load_next_c;
+        field_combo.INT_ENABLE.ERR_IE.next = next_c;
+        field_combo.INT_ENABLE.ERR_IE.load_next = load_next_c;
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.INT_ENABLE.ERROR_IE.value <= 1'h0;
+            field_storage.INT_ENABLE.ERR_IE.value <= 1'h0;
         end else begin
-            if(field_combo.INT_ENABLE.ERROR_IE.load_next) begin
-                field_storage.INT_ENABLE.ERROR_IE.value <= field_combo.INT_ENABLE.ERROR_IE.next;
+            if(field_combo.INT_ENABLE.ERR_IE.load_next) begin
+                field_storage.INT_ENABLE.ERR_IE.value <= field_combo.INT_ENABLE.ERR_IE.next;
             end
         end
     end
-    assign hwif_out.INT_ENABLE.ERROR_IE.value = field_storage.INT_ENABLE.ERROR_IE.value;
-    // Field: sysarray_csr.ARRAY_CFG.ARRAY_EN
-    always_comb begin
-        automatic logic [0:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.ARRAY_CFG.ARRAY_EN.value;
-        load_next_c = '0;
-        if(decoded_reg_strb.ARRAY_CFG && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.ARRAY_CFG.ARRAY_EN.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
-            load_next_c = '1;
-        end
-        field_combo.ARRAY_CFG.ARRAY_EN.next = next_c;
-        field_combo.ARRAY_CFG.ARRAY_EN.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.ARRAY_CFG.ARRAY_EN.value <= 1'h0;
-        end else begin
-            if(field_combo.ARRAY_CFG.ARRAY_EN.load_next) begin
-                field_storage.ARRAY_CFG.ARRAY_EN.value <= field_combo.ARRAY_CFG.ARRAY_EN.next;
-            end
-        end
-    end
-    assign hwif_out.ARRAY_CFG.ARRAY_EN.value = field_storage.ARRAY_CFG.ARRAY_EN.value;
-    // Field: sysarray_csr.ARRAY_CFG.BIAS_EN
-    always_comb begin
-        automatic logic [0:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.ARRAY_CFG.BIAS_EN.value;
-        load_next_c = '0;
-        if(decoded_reg_strb.ARRAY_CFG && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.ARRAY_CFG.BIAS_EN.value & ~decoded_wr_biten[1:1]) | (decoded_wr_data[1:1] & decoded_wr_biten[1:1]);
-            load_next_c = '1;
-        end
-        field_combo.ARRAY_CFG.BIAS_EN.next = next_c;
-        field_combo.ARRAY_CFG.BIAS_EN.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.ARRAY_CFG.BIAS_EN.value <= 1'h0;
-        end else begin
-            if(field_combo.ARRAY_CFG.BIAS_EN.load_next) begin
-                field_storage.ARRAY_CFG.BIAS_EN.value <= field_combo.ARRAY_CFG.BIAS_EN.next;
-            end
-        end
-    end
-    assign hwif_out.ARRAY_CFG.BIAS_EN.value = field_storage.ARRAY_CFG.BIAS_EN.value;
-    // Field: sysarray_csr.BIAS_ADDR.ADDR
-    always_comb begin
-        automatic logic [31:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.BIAS_ADDR.ADDR.value;
-        load_next_c = '0;
-        if(decoded_reg_strb.BIAS_ADDR && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.BIAS_ADDR.ADDR.value & ~decoded_wr_biten[31:0]) | (decoded_wr_data[31:0] & decoded_wr_biten[31:0]);
-            load_next_c = '1;
-        end
-        field_combo.BIAS_ADDR.ADDR.next = next_c;
-        field_combo.BIAS_ADDR.ADDR.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.BIAS_ADDR.ADDR.value <= 32'h0;
-        end else begin
-            if(field_combo.BIAS_ADDR.ADDR.load_next) begin
-                field_storage.BIAS_ADDR.ADDR.value <= field_combo.BIAS_ADDR.ADDR.next;
-            end
-        end
-    end
-    assign hwif_out.BIAS_ADDR.ADDR.value = field_storage.BIAS_ADDR.ADDR.value;
+    assign hwif_out.INT_ENABLE.ERR_IE.value = field_storage.INT_ENABLE.ERR_IE.value;
     // Field: sysarray_csr.POSTPROC_CFG.RELU_EN
     always_comb begin
         automatic logic [0:0] next_c;
         automatic logic load_next_c;
         next_c = field_storage.POSTPROC_CFG.RELU_EN.value;
         load_next_c = '0;
-        if(decoded_reg_strb.POSTPROC_CFG && decoded_req_is_wr) begin // SW write
+        if(decoded_reg_strb.POSTPROC_CFG && decoded_req_is_wr && !(hwif_in.cfg_lock)) begin // SW write
             next_c = (field_storage.POSTPROC_CFG.RELU_EN.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
             load_next_c = '1;
         end
@@ -749,7 +528,7 @@ module sysarray_csr (
         automatic logic load_next_c;
         next_c = field_storage.POSTPROC_CFG.REQUANT_EN.value;
         load_next_c = '0;
-        if(decoded_reg_strb.POSTPROC_CFG && decoded_req_is_wr) begin // SW write
+        if(decoded_reg_strb.POSTPROC_CFG && decoded_req_is_wr && !(hwif_in.cfg_lock)) begin // SW write
             next_c = (field_storage.POSTPROC_CFG.REQUANT_EN.value & ~decoded_wr_biten[1:1]) | (decoded_wr_data[1:1] & decoded_wr_biten[1:1]);
             load_next_c = '1;
         end
@@ -772,7 +551,7 @@ module sysarray_csr (
         automatic logic load_next_c;
         next_c = field_storage.POSTPROC_MULT.MULT.value;
         load_next_c = '0;
-        if(decoded_reg_strb.POSTPROC_MULT && decoded_req_is_wr) begin // SW write
+        if(decoded_reg_strb.POSTPROC_MULT && decoded_req_is_wr && !(hwif_in.cfg_lock)) begin // SW write
             next_c = (field_storage.POSTPROC_MULT.MULT.value & ~decoded_wr_biten[14:0]) | (decoded_wr_data[14:0] & decoded_wr_biten[14:0]);
             load_next_c = '1;
         end
@@ -795,7 +574,7 @@ module sysarray_csr (
         automatic logic load_next_c;
         next_c = field_storage.POSTPROC_SHIFT.SHIFT.value;
         load_next_c = '0;
-        if(decoded_reg_strb.POSTPROC_SHIFT && decoded_req_is_wr) begin // SW write
+        if(decoded_reg_strb.POSTPROC_SHIFT && decoded_req_is_wr && !(hwif_in.cfg_lock)) begin // SW write
             next_c = (field_storage.POSTPROC_SHIFT.SHIFT.value & ~decoded_wr_biten[5:0]) | (decoded_wr_data[5:0] & decoded_wr_biten[5:0]);
             load_next_c = '1;
         end
@@ -814,12 +593,12 @@ module sysarray_csr (
     assign hwif_out.POSTPROC_SHIFT.SHIFT.value = field_storage.POSTPROC_SHIFT.SHIFT.value;
     // Field: sysarray_csr.WEIGHT_ADDR.ADDR
     always_comb begin
-        automatic logic [31:0] next_c;
+        automatic logic [7:0] next_c;
         automatic logic load_next_c;
         next_c = field_storage.WEIGHT_ADDR.ADDR.value;
         load_next_c = '0;
         if(decoded_reg_strb.WEIGHT_ADDR && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.WEIGHT_ADDR.ADDR.value & ~decoded_wr_biten[31:0]) | (decoded_wr_data[31:0] & decoded_wr_biten[31:0]);
+            next_c = (field_storage.WEIGHT_ADDR.ADDR.value & ~decoded_wr_biten[7:0]) | (decoded_wr_data[7:0] & decoded_wr_biten[7:0]);
             load_next_c = '1;
         end
         field_combo.WEIGHT_ADDR.ADDR.next = next_c;
@@ -827,7 +606,7 @@ module sysarray_csr (
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.WEIGHT_ADDR.ADDR.value <= 32'h0;
+            field_storage.WEIGHT_ADDR.ADDR.value <= 8'h0;
         end else begin
             if(field_combo.WEIGHT_ADDR.ADDR.load_next) begin
                 field_storage.WEIGHT_ADDR.ADDR.value <= field_combo.WEIGHT_ADDR.ADDR.next;
@@ -837,12 +616,12 @@ module sysarray_csr (
     assign hwif_out.WEIGHT_ADDR.ADDR.value = field_storage.WEIGHT_ADDR.ADDR.value;
     // Field: sysarray_csr.ACT_ADDR.ADDR
     always_comb begin
-        automatic logic [31:0] next_c;
+        automatic logic [7:0] next_c;
         automatic logic load_next_c;
         next_c = field_storage.ACT_ADDR.ADDR.value;
         load_next_c = '0;
         if(decoded_reg_strb.ACT_ADDR && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.ACT_ADDR.ADDR.value & ~decoded_wr_biten[31:0]) | (decoded_wr_data[31:0] & decoded_wr_biten[31:0]);
+            next_c = (field_storage.ACT_ADDR.ADDR.value & ~decoded_wr_biten[7:0]) | (decoded_wr_data[7:0] & decoded_wr_biten[7:0]);
             load_next_c = '1;
         end
         field_combo.ACT_ADDR.ADDR.next = next_c;
@@ -850,7 +629,7 @@ module sysarray_csr (
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.ACT_ADDR.ADDR.value <= 32'h0;
+            field_storage.ACT_ADDR.ADDR.value <= 8'h0;
         end else begin
             if(field_combo.ACT_ADDR.ADDR.load_next) begin
                 field_storage.ACT_ADDR.ADDR.value <= field_combo.ACT_ADDR.ADDR.next;
@@ -858,37 +637,14 @@ module sysarray_csr (
         end
     end
     assign hwif_out.ACT_ADDR.ADDR.value = field_storage.ACT_ADDR.ADDR.value;
-    // Field: sysarray_csr.DST_ADDR.ADDR
-    always_comb begin
-        automatic logic [31:0] next_c;
-        automatic logic load_next_c;
-        next_c = field_storage.DST_ADDR.ADDR.value;
-        load_next_c = '0;
-        if(decoded_reg_strb.DST_ADDR && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.DST_ADDR.ADDR.value & ~decoded_wr_biten[31:0]) | (decoded_wr_data[31:0] & decoded_wr_biten[31:0]);
-            load_next_c = '1;
-        end
-        field_combo.DST_ADDR.ADDR.next = next_c;
-        field_combo.DST_ADDR.ADDR.load_next = load_next_c;
-    end
-    always_ff @(posedge clk) begin
-        if(rst) begin
-            field_storage.DST_ADDR.ADDR.value <= 32'h0;
-        end else begin
-            if(field_combo.DST_ADDR.ADDR.load_next) begin
-                field_storage.DST_ADDR.ADDR.value <= field_combo.DST_ADDR.ADDR.next;
-            end
-        end
-    end
-    assign hwif_out.DST_ADDR.ADDR.value = field_storage.DST_ADDR.ADDR.value;
     // Field: sysarray_csr.ACT_COUNT.COUNT
     always_comb begin
-        automatic logic [31:0] next_c;
+        automatic logic [8:0] next_c;
         automatic logic load_next_c;
         next_c = field_storage.ACT_COUNT.COUNT.value;
         load_next_c = '0;
         if(decoded_reg_strb.ACT_COUNT && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.ACT_COUNT.COUNT.value & ~decoded_wr_biten[31:0]) | (decoded_wr_data[31:0] & decoded_wr_biten[31:0]);
+            next_c = (field_storage.ACT_COUNT.COUNT.value & ~decoded_wr_biten[8:0]) | (decoded_wr_data[8:0] & decoded_wr_biten[8:0]);
             load_next_c = '1;
         end
         field_combo.ACT_COUNT.COUNT.next = next_c;
@@ -896,7 +652,7 @@ module sysarray_csr (
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.ACT_COUNT.COUNT.value <= 32'h0;
+            field_storage.ACT_COUNT.COUNT.value <= 9'h0;
         end else begin
             if(field_combo.ACT_COUNT.COUNT.load_next) begin
                 field_storage.ACT_COUNT.COUNT.value <= field_combo.ACT_COUNT.COUNT.next;
@@ -904,29 +660,29 @@ module sysarray_csr (
         end
     end
     assign hwif_out.ACT_COUNT.COUNT.value = field_storage.ACT_COUNT.COUNT.value;
-    // Field: sysarray_csr.LP_CTRL.AUTO_GATE_EN
+    // Field: sysarray_csr.DST_ADDR.ADDR
     always_comb begin
-        automatic logic [0:0] next_c;
+        automatic logic [8:0] next_c;
         automatic logic load_next_c;
-        next_c = field_storage.LP_CTRL.AUTO_GATE_EN.value;
+        next_c = field_storage.DST_ADDR.ADDR.value;
         load_next_c = '0;
-        if(decoded_reg_strb.LP_CTRL && decoded_req_is_wr) begin // SW write
-            next_c = (field_storage.LP_CTRL.AUTO_GATE_EN.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
+        if(decoded_reg_strb.DST_ADDR && decoded_req_is_wr) begin // SW write
+            next_c = (field_storage.DST_ADDR.ADDR.value & ~decoded_wr_biten[8:0]) | (decoded_wr_data[8:0] & decoded_wr_biten[8:0]);
             load_next_c = '1;
         end
-        field_combo.LP_CTRL.AUTO_GATE_EN.next = next_c;
-        field_combo.LP_CTRL.AUTO_GATE_EN.load_next = load_next_c;
+        field_combo.DST_ADDR.ADDR.next = next_c;
+        field_combo.DST_ADDR.ADDR.load_next = load_next_c;
     end
     always_ff @(posedge clk) begin
         if(rst) begin
-            field_storage.LP_CTRL.AUTO_GATE_EN.value <= 1'h1;
+            field_storage.DST_ADDR.ADDR.value <= 9'h0;
         end else begin
-            if(field_combo.LP_CTRL.AUTO_GATE_EN.load_next) begin
-                field_storage.LP_CTRL.AUTO_GATE_EN.value <= field_combo.LP_CTRL.AUTO_GATE_EN.next;
+            if(field_combo.DST_ADDR.ADDR.load_next) begin
+                field_storage.DST_ADDR.ADDR.value <= field_combo.DST_ADDR.ADDR.next;
             end
         end
     end
-    assign hwif_out.LP_CTRL.AUTO_GATE_EN.value = field_storage.LP_CTRL.AUTO_GATE_EN.value;
+    assign hwif_out.DST_ADDR.ADDR.value = field_storage.DST_ADDR.ADDR.value;
 
     //--------------------------------------------------------------------------
     // Write response
@@ -939,7 +695,7 @@ module sysarray_csr (
     // Readback
     //--------------------------------------------------------------------------
 
-    logic [6:0] rd_mux_addr;
+    logic [5:0] rd_mux_addr;
     assign rd_mux_addr = decoded_addr;
 
     logic readback_err;
@@ -948,60 +704,38 @@ module sysarray_csr (
     always_comb begin
         automatic logic [31:0] readback_data_var;
         readback_data_var = '0;
-        if(rd_mux_addr == 7'h4) begin
+        if(rd_mux_addr == 6'h4) begin
             readback_data_var[0] = hwif_in.STATUS.BUSY.next;
-            readback_data_var[1] = hwif_in.STATUS.WEIGHTS_LOADED.next;
-            readback_data_var[2] = hwif_in.STATUS.COMPUTING.next;
-            readback_data_var[3] = hwif_in.STATUS.STALLED.next;
-            readback_data_var[4] = field_storage.STATUS.DONE.value;
+            readback_data_var[1] = hwif_in.STATUS.W_VALID.next;
+            readback_data_var[2] = field_storage.STATUS.DONE.value;
+            readback_data_var[3] = field_storage.STATUS.CMD_ERR.value;
+            readback_data_var[4] = field_storage.STATUS.CFG_ERR.value;
         end
-        if(rd_mux_addr == 7'h8) begin
-            readback_data_var[0] = field_storage.ERROR_STATUS.READ_ERR.value;
-            readback_data_var[1] = field_storage.ERROR_STATUS.WRITE_ERR.value;
-            readback_data_var[2] = field_storage.ERROR_STATUS.CFG_ERR.value;
-            readback_data_var[3] = field_storage.ERROR_STATUS.CMD_ERR.value;
-        end
-        if(rd_mux_addr == 7'hc) begin
+        if(rd_mux_addr == 6'h8) begin
             readback_data_var[0] = field_storage.INT_ENABLE.DONE_IE.value;
-            readback_data_var[1] = field_storage.INT_ENABLE.ERROR_IE.value;
+            readback_data_var[1] = field_storage.INT_ENABLE.ERR_IE.value;
         end
-        if(rd_mux_addr == 7'h10) begin
-            readback_data_var[0] = field_storage.ARRAY_CFG.ARRAY_EN.value;
-            readback_data_var[1] = field_storage.ARRAY_CFG.BIAS_EN.value;
-        end
-        if(rd_mux_addr == 7'h14) begin
-            readback_data_var[31:0] = field_storage.BIAS_ADDR.ADDR.value;
-        end
-        if(rd_mux_addr == 7'h20) begin
+        if(rd_mux_addr == 6'hc) begin
             readback_data_var[0] = field_storage.POSTPROC_CFG.RELU_EN.value;
             readback_data_var[1] = field_storage.POSTPROC_CFG.REQUANT_EN.value;
         end
-        if(rd_mux_addr == 7'h24) begin
+        if(rd_mux_addr == 6'h10) begin
             readback_data_var[14:0] = field_storage.POSTPROC_MULT.MULT.value;
         end
-        if(rd_mux_addr == 7'h28) begin
+        if(rd_mux_addr == 6'h14) begin
             readback_data_var[5:0] = field_storage.POSTPROC_SHIFT.SHIFT.value;
         end
-        if(rd_mux_addr == 7'h30) begin
-            readback_data_var[31:0] = field_storage.WEIGHT_ADDR.ADDR.value;
+        if(rd_mux_addr == 6'h18) begin
+            readback_data_var[7:0] = field_storage.WEIGHT_ADDR.ADDR.value;
         end
-        if(rd_mux_addr == 7'h34) begin
-            readback_data_var[31:0] = field_storage.ACT_ADDR.ADDR.value;
+        if(rd_mux_addr == 6'h1c) begin
+            readback_data_var[7:0] = field_storage.ACT_ADDR.ADDR.value;
         end
-        if(rd_mux_addr == 7'h38) begin
-            readback_data_var[31:0] = field_storage.DST_ADDR.ADDR.value;
+        if(rd_mux_addr == 6'h20) begin
+            readback_data_var[8:0] = field_storage.ACT_COUNT.COUNT.value;
         end
-        if(rd_mux_addr == 7'h3c) begin
-            readback_data_var[31:0] = field_storage.ACT_COUNT.COUNT.value;
-        end
-        if(rd_mux_addr == 7'h40) begin
-            readback_data_var[0] = field_storage.LP_CTRL.AUTO_GATE_EN.value;
-        end
-        if(rd_mux_addr == 7'h44) begin
-            readback_data_var[0] = hwif_in.LP_STATUS.IDLE.next;
-            readback_data_var[1] = hwif_in.LP_STATUS.CLK_W_ON.next;
-            readback_data_var[2] = hwif_in.LP_STATUS.CLK_ADV_ON.next;
-            readback_data_var[3] = hwif_in.LP_STATUS.CLK_PP_ON.next;
+        if(rd_mux_addr == 6'h24) begin
+            readback_data_var[8:0] = field_storage.DST_ADDR.ADDR.value;
         end
         readback_data = readback_data_var;
         readback_done = decoded_req & ~decoded_req_is_wr;
