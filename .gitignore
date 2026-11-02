@@ -18,5 +18,5 @@ dump/
 sta_out/
 rtl-*
 tb-*
-fakeram/fakeram*/
+fakeram/fakeram*
 docs/
