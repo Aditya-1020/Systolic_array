@@ -1,4 +1,0 @@
-place_macro -macro_name {inst_acc_buf.gen_half\[0\].u_fakeram} -location {30.00 30.00} -orientation R0
-place_macro -macro_name {inst_acc_buf.gen_half\[1\].u_fakeram} -location {241.82 30.00} -orientation R0
-place_macro -macro_name {inst_res_buf.gen_half\[0\].u_fakeram} -location {453.64 30.00} -orientation R0
-place_macro -macro_name {inst_res_buf.gen_half\[1\].u_fakeram} -location {665.46 30.00} -orientation R0
