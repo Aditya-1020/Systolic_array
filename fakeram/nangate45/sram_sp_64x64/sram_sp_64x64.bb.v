@@ -1,4 +1,4 @@
-module fakeram130_128x64
+module sram_sp_64x64
 (
    rd_out,
    addr_in,
@@ -9,8 +9,8 @@ module fakeram130_128x64
    ce_in
 );
    parameter BITS = 64;
-   parameter WORD_DEPTH = 128;
-   parameter ADDR_WIDTH = 7;
+   parameter WORD_DEPTH = 64;
+   parameter ADDR_WIDTH = 6;
    parameter corrupt_mem_on_X_p = 1;
 
    output reg [BITS-1:0]    rd_out;
