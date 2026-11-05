@@ -1,14 +1,16 @@
 # sta_pre.tcl -- pre-layout timing for any module (replaces sta_gen / sta_postplace / sta_shell)
 # Yosys synthesis (liberty techmap) -> OpenSTA analysis, for any RTL.
 #
-# Usage:
-#   make presta DESIGN=<name>          (sets everything below from design-configs/<name>.mk)
-#   make presta-shell DESIGN=<name>    (SKIP_SYNTH=1, no -exit: reuse netlist, stay in the shell)
-#   or by hand: RTL_FILES="a.sv b.sv" LIBERTY=$PLATFORM_LIB sta -no_splash -exit sta_pre.tcl
+# Usage (run from the repo root, Makefile fills in every variable below):
+#   make presta TECH=sky130|nangate45        synth + STA, reports in <WORK_HOME>/reports/<platform>/pre_sta/
+#   make presta-shell TECH=...               reuse the netlist (SKIP_SYNTH=1) and stay in the shell
+#   by hand: RTL_FILES="a.sv b.sv" LIBERTY=<lib> openroad -no_splash -exit scripts/sta_pre.tcl
 #
 # Configuration is read from environment variables. Empty means default.
 #   RTL_FILES      space-separated files or globs (RTL_FILES or RTL_FILELIST required)
 #   RTL_FILELIST   text file with one path per line; blank lines, # and // comments ignored
+#   RTL_ROOT       prefix for relative paths in RTL_FILELIST (e.g. rtl/)
+#   MACRO_LIBS     macro liberty files (space separated); a sibling <name>.bb.v is read as the blackbox
 #   TOP            top module; auto-detected when empty
 #   LIBERTY        liberty file (default: $PLATFORM_LIB)
 #   SDC_FILE       constraints file; when empty, internal default constraints are used
@@ -68,6 +70,8 @@ proc read_filelist {path} {
 set TOP          [cfg TOP ""]
 set RTL_FILES    [cfg RTL_FILES ""]
 set RTL_FILELIST [cfg RTL_FILELIST ""]
+set RTL_ROOT     [cfg RTL_ROOT ""]
+set MACRO_LIBS   [cfg MACRO_LIBS ""]
 set INCLUDE_DIRS [cfg INCLUDE_DIRS ""]
 set DEFINES      [cfg DEFINES ""]
 set PARAMS       [cfg PARAMS ""]
@@ -96,12 +100,26 @@ if {[auto_execok yosys] eq ""} { error "yosys not found in PATH" }
 set rtl [expand_files $RTL_FILES]
 if {$RTL_FILELIST ne ""} {
     if {![file exists $RTL_FILELIST]} { error "RTL_FILELIST not found: $RTL_FILELIST" }
-    lappend rtl {*}[expand_files [read_filelist $RTL_FILELIST]]
+    foreach f [read_filelist $RTL_FILELIST] {
+        if {$RTL_ROOT ne "" && [file pathtype $f] eq "relative"} { set f [file join $RTL_ROOT $f] }
+        lappend rtl {*}[expand_files [list $f]]
+    }
 }
+foreach m $MACRO_LIBS {
+    set bb "[file rootname $m].bb.v"
+    if {[file exists $bb]} { lappend rtl $bb }
+}
+# same file listed twice (filelist + RTL_FILES) would be a duplicate module
+set uniq {}
+foreach f $rtl {
+    set n [file normalize $f]
+    if {[lsearch -exact $uniq $n] < 0} { lappend uniq $n }
+}
+set rtl $uniq
 if {[llength $rtl] == 0} { error "No RTL given. Set RTL_FILES or RTL_FILELIST" }
 if {$LIBERTY eq ""} { error "No liberty given. Set LIBERTY or PLATFORM_LIB" }
 
-set required [concat $rtl [list $LIBERTY]]
+set required [concat $rtl [list $LIBERTY] $MACRO_LIBS]
 if {$SDC_FILE ne ""} { lappend required $SDC_FILE }
 foreach f $required {
     if {![file exists $f]} { error "File not found: $f" }
@@ -157,7 +175,9 @@ puts $ys "opt"
 puts $ys $abc_cmd
 puts $ys "opt_clean -purge"
 puts $ys "rename -unescape"
-puts $ys "tee -o $OUT_DIR/area.rpt stat -liberty $LIBERTY"
+set stat_libs "-liberty $LIBERTY"
+foreach m $MACRO_LIBS { append stat_libs " -liberty $m" }
+puts $ys "tee -o $OUT_DIR/area.rpt stat $stat_libs"
 puts $ys "write_verilog -noattr -noexpr -nohex -nodec $OUT_DIR/netlist.v"
 close $ys
 
@@ -202,6 +222,7 @@ if {$TOP eq ""} {
 }
 
 read_liberty $LIBERTY
+foreach m $MACRO_LIBS { read_liberty $m }
 read_verilog $netlist_file
 link_design $TOP
 
