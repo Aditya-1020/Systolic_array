@@ -1,15 +1,15 @@
-// Simulation-only clock-gate model. Not for synthesis.
 `default_nettype none
-// Simulation-only, latch-based clock gate model. Use the SKY130 cell wrapper
-// in synthesis/implementation, not this file.
+// Simulation-only latch-based integrated clock-gate model.
 module OPENROAD_CLKGATE (
     input  wire CK,
     input  wire E,
     output wire GCK
 );
-    logic enable_latched;
+    reg enable_latched;
+    initial enable_latched = 1'b0;
     always_latch begin
-        if (!CK) enable_latched = E;
+        if (!CK)
+            enable_latched <= E;
     end
     assign GCK = CK & enable_latched;
 endmodule

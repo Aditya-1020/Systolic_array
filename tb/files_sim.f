@@ -1,5 +1,4 @@
-# Simulation-only models. Paths relative to this filelist directory (tb/).
+# Paths are relative to tb/.
 helper/cells_clkgate_sim.v
-helper/fakeram130_128x64.sv
-helper/fakeram130_256x64.sv
-helper/fakeram130_512x64.sv
+models/fakeram_sim.v
+mem_arb_tb_top.sv

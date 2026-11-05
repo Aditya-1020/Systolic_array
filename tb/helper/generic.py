@@ -1,61 +1,42 @@
-from cocotb.triggers import FallingEdge, RisingEdge, Timer
+from cocotb.triggers import Timer
 
-async def pulse_clock(clk, pulse_ns=1, low_ns=1):
+async def pulse_clock(clk, high_ns=5, low_ns=5):
     clk.value = 0
     await Timer(low_ns, unit="ns")
     clk.value = 1
-    await Timer(pulse_ns, unit="ns")
+    await Timer(high_ns, unit="ns")
     clk.value = 0
     await Timer(low_ns, unit="ns")
 
-async def wait_clock_cycles(dut, cycles=1, clk_name="clk"):
-    clk = getattr(dut, clk_name)
-    for _ in range(cycles):
-        await RisingEdge(clk)
-        await Timer(1, unit="ns")
-
-async def wait_for(dut, signal, expected, label, limit=100, clk_name="clk"):
-    for _ in range(limit):
-        await Timer(1, unit="ns")
-        if int(signal.value) == expected:
-            return
-        await wait_clock_cycles(dut, 1, clk_name)
-    raise AssertionError(f"Timeout waiting for {label}={expected}; got {signal.value}")
 
 def wrap_signed(value: int, width: int) -> int:
-    value &= (1 << width) - 1
-    if value & (1 << (width - 1)):
-        value -= 1 << width
-    return value
+    mask = (1 << width) - 1
+    value &= mask
+    return value - (1 << width) if value & (1 << (width - 1)) else value
 
-def pack_signed_lanes(values, width: int) -> int:
+
+def pack_lanes(values, width: int) -> int:
     mask = (1 << width) - 1
     packed = 0
-    for index, value in enumerate(values):
-        packed |= (int(value) & mask) << (index * width)
+    for lane, value in enumerate(values):
+        packed |= (int(value) & mask) << (lane * width)
     return packed
 
 
-def unpack_signed_lanes(value, count: int, width: int) -> list[int]:
+def unpack_lanes(value, count: int, width: int, signed=True):
     raw = int(value.value) if hasattr(value, "value") else int(value)
     mask = (1 << width) - 1
-    return [wrap_signed((raw >> (index * width)) & mask, width) for index in range(count)]
+    lanes = [(raw >> (lane * width)) & mask for lane in range(count)]
+    return [wrap_signed(v, width) for v in lanes] if signed else lanes
+
 
 def read_signed(signal) -> int:
     return int(signal.value.to_signed())
 
+
 def write_signed(signal, value: int, width: int):
-    minimum = -(1 << (width - 1))
-    maximum = (1 << (width - 1)) - 1
-    if not minimum <= value <= maximum:
+    lo = -(1 << (width - 1))
+    hi = (1 << (width - 1)) - 1
+    if not lo <= value <= hi:
         raise ValueError(f"{value} does not fit signed {width}-bit range")
-    signal.value = value
-
-
-async def pulse_signal_one_cycle(dut, signal, clk_name="clk"):
-    clk = getattr(dut, clk_name)
-    await FallingEdge(clk)
-    signal.value = 1
-    await RisingEdge(clk)
-    await FallingEdge(clk)
-    signal.value = 0
+    signal.value = value & ((1 << width) - 1)
