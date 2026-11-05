@@ -1,89 +1,99 @@
-addrmap sysarray_csr {
+// Systolic array CSR block. Compile with PeakRDL (see command in the notes).
+// 9 registers, 32-bit, word-aligned. Data lives in WBUF/ABUF/RBUF windows, not here.
+// Addresses below are beat indices into the macros, not byte addresses.
+addrmap sys_csr {
     name = "Systolic array CSR";
-    desc = "10 registers. All data lives in on-chip WBUF/ABUF/RBUF; descriptors are beat indices, not byte addresses.";
-    default regwidth = 32;
+    desc = "Control/status for the INT8 systolic accelerator. START is a write-1 pulse; the sequencer ignores writes to config while BUSY.";
+
+    default regwidth    = 32;
     default accesswidth = 32;
 
-    // Driven by hardware = BUSY. While high, datapath config fields ignore software writes.
-    signal { desc = "1 = array busy, config write-locked."; } cfg_lock;
-
-    // ------------------------------------------------------------------
-    // Execution control
-    // ------------------------------------------------------------------
     reg {
-        name = "COMMAND";
-        desc = "Write-1 command pulses, read as 0. ABORT beats LOAD_W/START. LOAD_W + START together -> CMD_ERR.";
-        default sw = w;
-        default hw = r;
-        default singlepulse = true;
-        field {desc = "Load bias + weights from WBUF[WEIGHT_ADDR]. Idle only.";} LOAD_W[0:0] = 0;
-        field {desc = "Run ACT_COUNT rows from ABUF[ACT_ADDR], write results to RBUF[DST_ADDR]. Needs W_VALID. Idle only.";} START[1:1] = 0;
-        field {desc = "Stop now, drop in-flight rows. Keeps W_VALID unless a weight load was cut short.";} ABORT[2:2] = 0;
-    } COMMAND @ 0x00;
+        name = "ID";
+        desc = "Block identification, read-only constants.";
+        field { name = "BLOCK";   desc = "0x5A01 = systolic array block."; sw = r; hw = na; } BLOCK[31:16]  = 16'h5A01;
+        field { name = "VERSION"; desc = "Register map version.";          sw = r; hw = na; } VERSION[15:0] = 16'h0002;
+    } ID @ 0x00;
+
+    reg {
+        name = "CTRL";
+        desc = "Run control.";
+        field {
+            name = "START";
+            desc = "Write 1 to start one run. Self-clearing pulse. Illegal while BUSY or with an out-of-range configuration: sets STATUS.ERR instead.";
+            sw = rw; hw = r; singlepulse = true;
+        } START[0:0] = 0;
+        field {
+            name = "W_LOAD";
+            desc = "1 = load N weight beats from WBUF[WADDR] before streaming. 0 = reuse the resident weights.";
+            sw = rw; hw = r;
+        } W_LOAD[1:1] = 0;
+        field {
+            name = "IRQ_EN";
+            desc = "Raise the interrupt output when STATUS.DONE is set.";
+            sw = rw; hw = r;
+        } IRQ_EN[2:2] = 0;
+    } CTRL @ 0x04;
 
     reg {
         name = "STATUS";
-        desc = "BUSY/W_VALID are live. DONE/CMD_ERR/CFG_ERR are sticky, write-1-to-clear. Hardware set wins over W1C. DONE also clears on an accepted START.";
-        field {sw = r; hw = w; desc = "Load or run in progress.";} BUSY[0:0];
-        field {sw = r; hw = w; desc = "Bias + weights resident in the array.";} W_VALID[1:1];
-        field {sw = rw; hw = r; onwrite = woclr; hwset = true; hwclr = true; precedence = hw; desc = "Last result beat written to RBUF.";} DONE[2:2] = 0;
-        field {sw = rw; hw = r; onwrite = woclr; hwset = true; precedence = hw; desc = "Command rejected: illegal sequence (busy, START without W_VALID, LOAD_W+START).";} CMD_ERR[3:3] = 0;
-        field {sw = rw; hw = r; onwrite = woclr; hwset = true; precedence = hw; desc = "Command rejected: ACT_COUNT==0 or a range overruns its SRAM.";} CFG_ERR[4:4] = 0;
-    } STATUS @ 0x04;
+        desc = "BUSY is live. DONE and ERR are sticky, write-1-to-clear; a hardware set wins over a simultaneous clear.";
+        field {
+            name = "BUSY";
+            desc = "A run is in progress.";
+            sw = r; hw = w;
+        } BUSY[0:0] = 0;
+        field {
+            name = "DONE";
+            desc = "Last run completed and all results are in RBUF.";
+            sw = rw; hw = w; we = true; onwrite = woclr; precedence = hw;
+        } DONE[1:1] = 0;
+        field {
+            name = "ERR";
+            desc = "START rejected: busy, COUNT outside 1..MAX_ROWS, a buffer range overflow, or PPCFG.SHIFT above the maximum.";
+            sw = rw; hw = w; we = true; onwrite = woclr; precedence = hw;
+        } ERR[2:2] = 0;
+    } STATUS @ 0x08;
 
     reg {
-        name = "INT_ENABLE";
-        desc = "irq = (DONE & DONE_IE) | ((CMD_ERR | CFG_ERR) & ERR_IE)";
-        field {sw = rw; hw = r; desc = "Interrupt on DONE.";} DONE_IE[0:0] = 0;
-        field {sw = rw; hw = r; desc = "Interrupt on CMD_ERR or CFG_ERR.";} ERR_IE[1:1] = 0;
-    } INT_ENABLE @ 0x08;
-
-    // ------------------------------------------------------------------
-    // Post-processing (write-locked while BUSY; these flops feed the datapath directly)
-    // ------------------------------------------------------------------
-    reg {
-        name = "POSTPROC_CFG";
-        desc = "00 raw GEMM (int32 lanes, 4 beats/row) | 01 ReLU | 11 ReLU+requant | 10 requant only (int8 lanes, 1 beat/row).";
-        field {sw = rw; hw = r; swwel = cfg_lock; desc = "ReLU on accumulator.";} RELU_EN[0:0] = 0;
-        field {sw = rw; hw = r; swwel = cfg_lock; desc = "Multiply, shift/round, saturate to int8.";} REQUANT_EN[1:1] = 0;
-    } POSTPROC_CFG @ 0x0C;
+        name = "DIM";
+        desc = "Build constants, tied to the RTL parameters in sys_pkg. Regenerate if the package changes.";
+        field { name = "N";        desc = "Array size N.";                   sw = r; hw = na; } N[7:0]         = 8;
+        field { name = "DW";       desc = "Data width in bits.";             sw = r; hw = na; } DW[15:8]       = 8;
+        field { name = "ACC_W";    desc = "Accumulator width in bits.";      sw = r; hw = na; } ACC_W[23:16]   = 19;
+        field { name = "MAX_ROWS"; desc = "Maximum activation rows per run."; sw = r; hw = na; } MAX_ROWS[31:24] = 64;
+    } DIM @ 0x0C;
 
     reg {
-        name = "POSTPROC_MULT";
-        desc = "Unsigned fixed-point multiplier (15 bits, MULT_W=16).";
-        field {sw = rw; hw = r; swwel = cfg_lock;} MULT[14:0] = 0;
-    } POSTPROC_MULT @ 0x10;
+        name = "WADDR";
+        desc = "WBUF beat index of the first weight beat of the tile.";
+        field { name = "ADDR"; desc = "Weight buffer beat index."; sw = rw; hw = r; } ADDR[15:0] = 0;
+    } WADDR @ 0x10;
 
     reg {
-        name = "POSTPROC_SHIFT";
-        desc = "Right shift after multiply, round-to-nearest (6 bits, SHIFT_W=6).";
-        field {sw = rw; hw = r; swwel = cfg_lock;} SHIFT[5:0] = 0;
-    } POSTPROC_SHIFT @ 0x14;
-
-    // ------------------------------------------------------------------
-    // SRAM descriptors, in 64-bit beats. Sampled at command accept.
-    // ------------------------------------------------------------------
-    reg {
-        name = "WEIGHT_ADDR";
-        desc = "WBUF beat index of a weight block: 2 bias beats (8 x int16, lane 0 first) then 8 weight beats (row 0 first). WBUF is 256 beats.";
-        field {sw = rw; hw = r;} ADDR[7:0] = 0;
-    } WEIGHT_ADDR @ 0x18;
+        name = "AADDR";
+        desc = "ABUF beat index of the first activation row.";
+        field { name = "ADDR"; desc = "Activation buffer beat index."; sw = rw; hw = r; } ADDR[15:0] = 0;
+    } AADDR @ 0x14;
 
     reg {
-        name = "ACT_ADDR";
-        desc = "ABUF beat index of first activation row (8 x int8 per beat). ABUF is 256 beats.";
-        field {sw = rw; hw = r;} ADDR[7:0] = 0;
-    } ACT_ADDR @ 0x1C;
+        name = "CADDR";
+        desc = "RBUF beat index of the first result beat.";
+        field { name = "ADDR"; desc = "Result buffer beat index."; sw = rw; hw = r; } ADDR[15:0] = 0;
+    } CADDR @ 0x18;
 
     reg {
-        name = "ACT_COUNT";
-        desc = "Number of activation rows, 1..256. 0 or overrun -> CFG_ERR.";
-        field {sw = rw; hw = r;} COUNT[8:0] = 0;
-    } ACT_COUNT @ 0x20;
+        name = "COUNT";
+        desc = "Number of activation rows (beats) to stream, 1..MAX_ROWS.";
+        field { name = "ROWS"; desc = "Activation row count."; sw = rw; hw = r; } ROWS[15:0] = 0;
+    } COUNT @ 0x1C;
 
     reg {
-        name = "DST_ADDR";
-        desc = "RBUF beat index of first result beat. Raw: 4 beats/row (lanes 2k,2k+1 in beat k). Requant: 1 beat/row. RBUF is 512 beats.";
-        field {sw = rw; hw = r;} ADDR[8:0] = 0;
-    } DST_ADDR @ 0x24;
+        name = "PPCFG";
+        desc = "Post-processing. PP_EN=0 clock-gates the post-processor and RBUF receives raw int32 columns (4 beats per row). PP_EN=1 writes int8 rows (1 beat per row): round, arithmetic shift right, optional ReLU, saturate.";
+        field { name = "PP_EN"; desc = "1 = requantize to int8, 0 = raw int32 output with the post-processor clock gated off."; sw = rw; hw = r; } PP_EN[0:0]  = 1;
+        field { name = "RELU";  desc = "Clamp negative values to zero before saturation.";                                        sw = rw; hw = r; } RELU[1:1]   = 0;
+        field { name = "ROUND"; desc = "Add half an LSB (round half up) before the shift.";                                       sw = rw; hw = r; } ROUND[2:2]  = 0;
+        field { name = "SHIFT"; desc = "Arithmetic right shift, 0..ACC_W-1.";                                                     sw = rw; hw = r; } SHIFT[12:8] = 0;
+    } PPCFG @ 0x20;
 };
