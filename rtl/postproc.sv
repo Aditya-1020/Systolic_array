@@ -26,21 +26,18 @@ logic [N*DW-1:0] relu_comb;
 logic [N*DW-1:0] relu_q;
 logic stage1_valid_q;
 logic stage2_valid_q;
-logic pp_fire, cg_en, pp_clk;
+logic pp_fire;
 
 assign pp_fire = i_post_proc_en & i_arr_valid;
 
-assign cg_en = pp_fire | stage1_valid_q | stage2_valid_q;
-OPENROAD_CLKGATE u_cg_postproc (.CK(i_clk),.E(cg_en), .GCK(pp_clk));
-
 round #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W)) u_round (
-    .i_data(i_sys_data), .i_shift(i_shift), 
+    .i_data(i_sys_data), .i_shift(i_shift),
     .i_round_const(i_round_const), .o_data(round_comb)
 );
 
 relu #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_relu (.i_data(round_q), .i_relu_en(i_relu_en), .o_data(relu_comb));
 
-always_ff @(posedge pp_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk or negedge i_rstn) begin
     if (!i_rstn) begin
         round_q <= '0;
         relu_q <= '0;

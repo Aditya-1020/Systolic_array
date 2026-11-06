@@ -36,8 +36,11 @@ systolic_array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
     .o_c_data   (o_c_data)
 );
 
+logic pp_clk;
+OPENROAD_CLKGATE u_cg_postproc (.CK(i_clk), .E(i_post_proc_en), .GCK(pp_clk));
+
 postproc #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_postproc (
-    .i_clk            (i_clk),
+    .i_clk            (pp_clk),
     .i_rstn           (i_rstn),
     .i_post_proc_en   (i_post_proc_en),
     .i_round_const    (i_round_const),

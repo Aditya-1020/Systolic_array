@@ -24,7 +24,6 @@ logic [VALID_LAT-1:0] valid_q;
 OPENROAD_CLKGATE u_cg_weight (.CK(i_clk), .E(i_w_load), .GCK(clk_w));
 OPENROAD_CLKGATE u_cg_advance (.CK(i_clk), .E(i_a_advance), .GCK(clk_adv));
 
-// Row r activation is delayed by r accepted array advances.
 genvar r;
 generate
     for (r = 0; r < N; r++) begin : g_input_skew
@@ -51,7 +50,6 @@ array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
     .o_c_bottom (c_bottom)
 );
 
-// Column c is delayed by N-1-c advances to deskew the output vector.
 genvar c;
 generate
     for (c = 0; c < N; c++) begin : g_output_deskew

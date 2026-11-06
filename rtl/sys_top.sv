@@ -243,7 +243,7 @@ res_wr #(.N(N), .DW(DW), .ACC_W(ACC_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_res_wr
     .i_count       (count),
     .i_pp_valid    (pp_valid),
     .i_pp_data     (pp_data),
-    .i_raw_valid   (c_valid),
+    .i_raw_valid   (c_valid & a_advance), // one result event per array advance
     .i_raw_data    (c_data),
     .i_raw_beat    (beat),
     .o_rbuf_req    (rbuf_core_req),

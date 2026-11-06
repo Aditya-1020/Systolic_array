@@ -56,7 +56,7 @@ localparam int AA_W = sys_pkg::p_abuf_aw;
 sys_pkg::ctrl_state_t state_q, state_d;
 sys_pkg::addr_t a_end, c_end, w_end, rbuf_beats;
 logic bad_count, bad_abuf, bad_rbuf, bad_wbuf, bad_shift, bad_cfg;
-logic accept;
+logic accept, start_q, start_pulse;
 
 logic bad_q, w_load_q, pp_en_q, relu_q;
 logic [sys_pkg::p_wbuf_aw-1:0] waddr_q;
@@ -72,7 +72,15 @@ logic [ROW_W-1:0] rd_cnt_q, fire_cnt_q, fire_cnt_nxt;
 logic [BEAT_W-1:0] phase_q;
 logic [sys_pkg::p_wbuf_aw-1:0] wl_addr;
 
-assign accept = i_start & (state_q == sys_pkg::ST_IDLE);
+assign start_pulse = i_start & ~start_q;
+assign accept = start_pulse & (state_q == sys_pkg::ST_IDLE);
+
+always_ff @(posedge i_clk or negedge i_rstn) begin
+    if (!i_rstn)
+        start_q <= 1'b0;
+    else
+        start_q <= i_start;
+end
 assign rbuf_beats = i_pp_en ? sys_pkg::addr_t'(i_count) : (sys_pkg::addr_t'(i_count) * sys_pkg::p_raw_beats);
 assign a_end = sys_pkg::addr_t'(i_aaddr) + sys_pkg::addr_t'(i_count);
 assign c_end = sys_pkg::addr_t'(i_caddr) + rbuf_beats;
@@ -126,7 +134,7 @@ assign wl_last = (wl_cnt_q == WL_W'(N - 1));
 always_comb begin
     state_d = state_q;
     case (state_q)
-        sys_pkg::ST_IDLE:  if (i_start) state_d = sys_pkg::ST_CHECK;
+        sys_pkg::ST_IDLE:  if (start_pulse) state_d = sys_pkg::ST_CHECK;
         sys_pkg::ST_CHECK: begin
             if (bad_q) state_d = sys_pkg::ST_IDLE;
             else if (w_load_q) state_d = sys_pkg::ST_WLOAD;
@@ -184,7 +192,7 @@ assign o_beat = phase_q;
 assign o_busy = (state_q != sys_pkg::ST_IDLE);
 assign o_run_start = (state_q == sys_pkg::ST_CHECK) & ~bad_q;
 assign o_done_set = (state_q == sys_pkg::ST_DONE);
-assign o_err_set = ((state_q == sys_pkg::ST_CHECK) & bad_q) | (i_start & (state_q != sys_pkg::ST_IDLE));
+assign o_err_set = ((state_q == sys_pkg::ST_CHECK) & bad_q) | (start_pulse & (state_q != sys_pkg::ST_IDLE));
 assign o_state = state_q;
  
 assign o_pp_en = pp_en_q;

@@ -62,8 +62,9 @@ logic [1:0] win;
 logic [8:0] beat;
 logic half_hi;
 logic access, csr_ok, mem_ok, bad_access;
-logic sw_req, sw_gnt, sw_rvalid, rd_wait_q;
+logic sw_req, sw_gnt, sw_rvalid, rd_wait_q, rd_done_q;
 logic [DATA_W-1:0] sw_rdata, sw_wdata, sw_wmask;
+logic [31:0] rd_data_q;
 logic [31:0] strb_mask;
  
 assign win = i_paddr[13:12];
@@ -84,7 +85,7 @@ end
  
 assign bad_access = access & ~csr_ok & ~mem_ok;
  
-assign sw_req = access & mem_ok & ~rd_wait_q;
+assign sw_req = access & mem_ok & ~rd_wait_q & ~rd_done_q;
  
 assign strb_mask = {{8{i_pstrb[3]}}, {8{i_pstrb[2]}}, {8{i_pstrb[1]}}, {8{i_pstrb[0]}}};
 assign sw_wdata = {i_pwdata, i_pwdata};
@@ -133,12 +134,20 @@ always_comb begin
 end
  
 always_ff @(posedge i_clk or negedge i_rstn) begin
-    if (!i_rstn)
+    if (!i_rstn) begin
         rd_wait_q <= 1'b0;
-    else if (rd_wait_q & sw_rvalid)
+        rd_done_q <= 1'b0;
+        rd_data_q <= '0;
+    end else if (!access) begin
         rd_wait_q <= 1'b0;
-    else if (sw_req & sw_gnt & ~i_pwrite)
+        rd_done_q <= 1'b0;
+    end else if (rd_wait_q & sw_rvalid) begin
+        rd_wait_q <= 1'b0;
+        rd_done_q <= 1'b1;
+        rd_data_q <= half_hi ? sw_rdata[DATA_W-1 -: 32] : sw_rdata[31:0];
+    end else if (sw_req & sw_gnt & ~i_pwrite) begin
         rd_wait_q <= 1'b1;
+    end
 end
  
 // CSR pass-through
@@ -166,8 +175,8 @@ always_comb begin
         if (i_pwrite) begin
             o_pready = sw_req & sw_gnt;
         end else begin
-            o_pready = rd_wait_q & sw_rvalid;
-            o_prdata = half_hi ? sw_rdata[DATA_W-1 -: 32] : sw_rdata[31:0];
+            o_pready = rd_done_q;
+            o_prdata = rd_data_q;
         end
     end
 end

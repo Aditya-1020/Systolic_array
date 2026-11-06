@@ -5,7 +5,7 @@ module OPENROAD_CLKGATE (
     output wire GCK
 );
 `ifdef OPENROAD_CLKGATE_NANGATE45
-    CLKGATE_X1 u_icg (.CLK(CK), .GATE(E), .GCLK(GCK));
+    CLKGATE_X1 u_icg (.CK(CK), .E(E), .GCK(GCK));
 `elsif OPENROAD_CLKGATE_SKY130
     sky130_fd_sc_hd__dlclkp_1 u_icg (.CLK(CK), .GATE(E), .GCLK(GCK));
 `else
