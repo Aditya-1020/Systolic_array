@@ -36,8 +36,8 @@ async def test_systolic_array_single_vector_gemm(dut):
     dut.i_w_load.value = 0
     dut.i_w_data.value = 0
 
-    # Inject one activation vector, then zeros to flush the mesh and deskew.
-    for cycle in range(2 * N - 1):
+    lat = 6 * N - 3
+    for cycle in range(lat):
         dut.i_a_advance.value = 1
         dut.i_a_data.value = pack_lanes(activations, DW) if cycle == 0 else 0
         dut.i_a_valid.value = 1 if cycle == 0 else 0
@@ -48,7 +48,7 @@ async def test_systolic_array_single_vector_gemm(dut):
     dut.i_a_data.value = 0
     await Timer(1, unit="ns")
 
-    assert int(dut.o_c_valid.value) == 1, "valid did not emerge after 2*N-1 advances"
+    assert int(dut.o_c_valid.value) == 1, f"valid did not emerge after {lat} advances"
     expected = [
         wrap_signed(sum(activations[r] * weights[r][c] for r in range(N)), ACC_W)
         for c in range(N)

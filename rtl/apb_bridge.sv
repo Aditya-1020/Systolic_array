@@ -133,7 +133,7 @@ always_comb begin
     endcase
 end
  
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
         rd_wait_q <= 1'b0;
         rd_done_q <= 1'b0;

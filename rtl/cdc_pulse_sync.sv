@@ -11,7 +11,7 @@ module cdc_pulse_sync (
 logic toggle_q;
 logic [2:0] sync_q;
 
-always_ff @(posedge src_clk or negedge src_rstn) begin
+always_ff @(posedge src_clk) begin
     if (!src_rstn) begin
         toggle_q <= 1'b0;
     end else if (i_pulse) begin
@@ -19,7 +19,7 @@ always_ff @(posedge src_clk or negedge src_rstn) begin
     end
 end
 
-always_ff @(posedge dst_clk or negedge dst_rstn) begin
+always_ff @(posedge dst_clk) begin
     if (!dst_rstn) begin
         sync_q <= 3'b000;
     end else begin

@@ -76,7 +76,7 @@ logic wbuf_pend_q;
 assign start_pulse = i_start & ~start_q;
 assign accept = start_pulse & (state_q == sys_pkg::ST_IDLE);
 
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn)
         start_q <= 1'b0;
     else
@@ -96,7 +96,7 @@ assign bad_cfg = bad_count | bad_abuf | bad_rbuf | bad_wbuf | bad_shift;
 
 assign round_const_d = (i_round_en && (i_shift != '0)) ? (ACC_W'(1) << (i_shift - 1'b1)) : '0;
 
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
         bad_q <= 1'b0;
         w_load_q <= 1'b0;
@@ -151,7 +151,7 @@ end
  
 assign o_wbuf_req = (state_q == sys_pkg::ST_WLOAD);
 
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
         state_q <= sys_pkg::ST_IDLE;
         adv_q <= 1'b0;
@@ -186,9 +186,7 @@ end
 assign wl_addr = waddr_q + WA_W'(wl_cnt_q);
 assign o_wbuf_addr = WMA_W'(wl_addr);
 assign o_abuf_addr = aaddr_q + AA_W'(rd_cnt_q);
- 
-// Qualify weight ICG with the outstanding WBUF read (1-cycle mem latency),
-// not ST_WLOAD alone — last beat's rvalid arrives after leaving WLOAD.
+
 assign o_w_load = wbuf_pend_q & i_wbuf_rvalid;
 assign o_a_advance = adv_q;
 assign o_a_valid = i_abuf_rvalid;

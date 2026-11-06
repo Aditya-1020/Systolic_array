@@ -35,8 +35,8 @@ logic core_sel, sw_sel;
 logic core_read_q, sw_read_q;
 
 always_comb begin
-    core_sel = i_rstn & i_core_req;
-    sw_sel = i_rstn & i_sw_req & ~i_core_req;
+    core_sel = i_core_req;
+    sw_sel = i_sw_req & ~i_core_req;
     o_core_gnt = core_sel;
     o_sw_gnt = sw_sel;
     o_mem_ce = core_sel | sw_sel;
@@ -58,7 +58,7 @@ always_comb begin
     end
 end
 
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
         core_read_q <= 1'b0;
         sw_read_q <= 1'b0;

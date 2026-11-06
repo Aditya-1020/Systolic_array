@@ -7,7 +7,7 @@ module cdc_sync_bit (
     output logic o_sync
 );
 logic [1:0] sync_q;
-always_ff @(posedge clk or negedge rstn) begin
+always_ff @(posedge clk) begin
     if (!rstn) begin
         sync_q <= 2'b00;
     end else begin

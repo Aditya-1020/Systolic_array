@@ -1,3 +1,4 @@
+// 3 stage (mul not in same as capture)
 `default_nettype none
 module pe #(
     parameter int DW = sys_pkg::p_dw,
@@ -12,19 +13,23 @@ module pe #(
     output logic signed [DW-1:0] o_a,
     output logic signed [ACC_W-1:0] o_psum
 );
-logic signed [2*DW-1:0] prod;
-logic signed [ACC_W-1:0] prod_ext;
 
-assign prod = i_a * o_w;
-assign prod_ext = ACC_W'(prod);
+logic signed [DW-1:0] a_s1, a_s2;
+logic signed [ACC_W-1:0] psum_s1, psum_s2;
+logic signed [ACC_W-1:0] prod_s2;
 
 always_ff @(posedge i_clk_w) begin
     o_w <= i_w;
 end
 
 always_ff @(posedge i_clk_adv) begin
-    o_a <= i_a;
-    o_psum <= i_psum + prod_ext;
+    a_s1 <= i_a;
+    psum_s1 <= i_psum;
+    a_s2 <= a_s1;
+    psum_s2 <= psum_s1;
+    prod_s2 <= ACC_W'(a_s1 * o_w);
+    o_a <= a_s2;
+    o_psum <= psum_s2 + prod_s2;
 end
 
 endmodule

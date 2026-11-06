@@ -40,7 +40,7 @@ assign req_wdata = {i_a_we, i_a_addr, i_a_wdata, i_a_wmask};
 assign req_push = i_a_req & ~req_full & ~a_pushed_q;
 assign o_a_gnt = req_push;
 
-always_ff @(posedge i_clk_a or negedge i_rstn_a) begin
+always_ff @(posedge i_clk_a) begin
     if (!i_rstn_a) begin
         a_pushed_q <= 1'b0;
     end else if (!i_a_req) begin
@@ -70,7 +70,7 @@ assign o_b_wmask = req_rdata[DATA_W-1:0];
 assign o_b_req = ~req_empty & ~b_pend_q;
 assign req_pop = o_b_req & i_b_gnt;
 
-always_ff @(posedge i_clk_b or negedge i_rstn_b) begin
+always_ff @(posedge i_clk_b) begin
     if (!i_rstn_b)
         b_pend_q <= 1'b0;
     else if (o_b_req & i_b_gnt & ~o_b_we)
@@ -95,7 +95,7 @@ async_fifo #(.WIDTH(DATA_W), .DEPTH(DEPTH)) u_rsp_fifo (
 );
 
 // One-cycle rvalid pulse on APB domain (matches mem_arb).
-always_ff @(posedge i_clk_a or negedge i_rstn_a) begin
+always_ff @(posedge i_clk_a) begin
     if (!i_rstn_a) begin
         a_rvalid_q <= 1'b0;
         a_rdata_q  <= '0;

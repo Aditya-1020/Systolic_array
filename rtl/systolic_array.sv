@@ -14,7 +14,8 @@ module systolic_array #(
     output logic o_c_valid,
     output logic [N*ACC_W-1:0] o_c_data
 );
-localparam int VALID_LAT = 2*N - 1;
+localparam int HOP = 3;
+localparam int VALID_LAT = 6*N - 3;
 
 logic clk_w, clk_adv;
 logic [N*DW-1:0] a_skewed;
@@ -27,16 +28,17 @@ OPENROAD_CLKGATE u_cg_advance (.CK(i_clk), .E(i_a_advance), .GCK(clk_adv));
 genvar r;
 generate
     for (r = 0; r < N; r++) begin : g_input_skew
-        if (r == 0) begin : g_no_delay
+        localparam int SKEW = HOP * r;
+        if (SKEW == 0) begin : g_no_delay
             assign a_skewed[r*DW +: DW] = i_a_data[r*DW +: DW];
         end else begin : g_delay
-            logic [r-1:0][DW-1:0] skew_q;
+            logic [SKEW-1:0][DW-1:0] skew_q;
             always_ff @(posedge clk_adv) begin
                 skew_q[0] <= i_a_data[r*DW +: DW];
-                for (int k = 1; k < r; k++)
+                for (int k = 1; k < SKEW; k++)
                     skew_q[k] <= skew_q[k-1];
             end
-            assign a_skewed[r*DW +: DW] = skew_q[r-1];
+            assign a_skewed[r*DW +: DW] = skew_q[SKEW-1];
         end
     end
 endgenerate
@@ -53,7 +55,7 @@ array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
 genvar c;
 generate
     for (c = 0; c < N; c++) begin : g_output_deskew
-        localparam int DELAY = N - 1 - c;
+        localparam int DELAY = HOP * (N - 1 - c);
         if (DELAY == 0) begin : g_no_delay
             assign o_c_data[c*ACC_W +: ACC_W] = c_bottom[c*ACC_W +: ACC_W];
         end else begin : g_delay
@@ -68,7 +70,7 @@ generate
     end
 endgenerate
 
-always_ff @(posedge clk_adv or negedge i_rstn) begin
+always_ff @(posedge clk_adv) begin
     if (!i_rstn)
         valid_q <= '0;
     else

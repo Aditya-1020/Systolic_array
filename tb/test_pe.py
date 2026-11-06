@@ -38,8 +38,9 @@ async def test_pe_registered_weight_and_mac(dut):
 
         write_signed(dut.i_a, activation, DW)
         write_signed(dut.i_psum, psum, ACC_W)
-        await pulse_clock(dut.i_clk_adv)
-
+        await pulse_clock(dut.i_clk_adv)  # S1: capture a/psum
+        await pulse_clock(dut.i_clk_adv)  # S2: mul
+        await pulse_clock(dut.i_clk_adv)  # S3: add → o_a / o_psum
         assert read_signed(dut.o_a) == activation, f"vector {index}: activation register"
         expected = wrap_signed(psum + activation * weight, ACC_W)
         actual = read_signed(dut.o_psum)

@@ -30,7 +30,6 @@ function automatic logic [AW:0] bin2gray(input logic [AW:0] b);
     return (b >> 1) ^ b;
 endfunction
 
-// Full/empty from current pointers
 assign wr_full = (bin2gray(wr_bin_q + (AW+1)'(1)) == {~rd_gray_wr_q2[AW:AW-1], rd_gray_wr_q2[AW-2:0]});
 assign rd_empty = (rd_gray_q == wr_gray_rd_q2);
 
@@ -42,7 +41,7 @@ assign rd_bin_next = rd_bin_q + (AW+1)'(rd_fire);
 assign wr_gray_next = bin2gray(wr_bin_next);
 assign rd_gray_next = bin2gray(rd_bin_next);
 
-always_ff @(posedge wr_clk or negedge wr_rstn) begin
+always_ff @(posedge wr_clk) begin
     if (!wr_rstn) begin
         wr_bin_q  <= '0;
         wr_gray_q <= '0;
@@ -52,12 +51,21 @@ always_ff @(posedge wr_clk or negedge wr_rstn) begin
     end
 end
 
-always_ff @(posedge wr_clk) begin
-    if (wr_fire)
-        mem[wr_bin_q[AW-1:0]] <= wr_data;
-end
+// per entry icg for fanout
+genvar gi;
+generate
+    for (gi = 0; gi < DEPTH; gi++) begin : g_mem
+        logic wr_sel;
+        logic mem_clk;
+        assign wr_sel = wr_fire & (wr_bin_q[AW-1:0] == AW'(gi));
+        OPENROAD_CLKGATE u_cg_mem (.CK(wr_clk), .E(wr_sel), .GCK(mem_clk));
+        always_ff @(posedge mem_clk) begin
+            mem[gi] <= wr_data;
+        end
+    end
+endgenerate
 
-always_ff @(posedge wr_clk or negedge wr_rstn) begin
+always_ff @(posedge wr_clk) begin
     if (!wr_rstn) begin
         rd_gray_wr_q1 <= '0;
         rd_gray_wr_q2 <= '0;
@@ -67,7 +75,7 @@ always_ff @(posedge wr_clk or negedge wr_rstn) begin
     end
 end
 
-always_ff @(posedge rd_clk or negedge rd_rstn) begin
+always_ff @(posedge rd_clk) begin
     if (!rd_rstn) begin
         rd_bin_q  <= '0;
         rd_gray_q <= '0;
@@ -77,7 +85,7 @@ always_ff @(posedge rd_clk or negedge rd_rstn) begin
     end
 end
 
-always_ff @(posedge rd_clk or negedge rd_rstn) begin
+always_ff @(posedge rd_clk) begin
     if (!rd_rstn) begin
         wr_gray_rd_q1 <= '0;
         wr_gray_rd_q2 <= '0;

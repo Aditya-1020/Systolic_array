@@ -60,7 +60,7 @@ assign o_rbuf_addr = i_caddr + row_base + beat_off;
 assign o_rbuf_wdata = raw_mode ? raw_beat_data[raw_beat_q] : i_pp_data;
 assign o_rbuf_wmask = '1;
 
-always_ff @(posedge i_clk or negedge i_rstn) begin
+always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
         rows_q <= '0;
         raw_active_q <= 1'b0;
@@ -92,10 +92,11 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
     end
 end
 
-always_ff @(posedge i_clk) begin
-    if (raw_mode & i_raw_valid) begin
-        raw_data_q <= i_raw_data;
-    end
+logic raw_data_clk;
+OPENROAD_CLKGATE u_cg_raw_data (.CK(i_clk), .E(i_raw_valid), .GCK(raw_data_clk));
+
+always_ff @(posedge raw_data_clk) begin
+    raw_data_q <= i_raw_data;
 end
 
 assign o_all_written = (rows_q == i_count);
