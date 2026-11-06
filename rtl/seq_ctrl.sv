@@ -71,6 +71,7 @@ logic [WL_W-1:0] wl_cnt_q;
 logic [ROW_W-1:0] rd_cnt_q, fire_cnt_q, fire_cnt_nxt;
 logic [BEAT_W-1:0] phase_q;
 logic [sys_pkg::p_wbuf_aw-1:0] wl_addr;
+logic wbuf_pend_q;
 
 assign start_pulse = i_start & ~start_q;
 assign accept = start_pulse & (state_q == sys_pkg::ST_IDLE);
@@ -148,6 +149,8 @@ always_comb begin
     endcase
 end
  
+assign o_wbuf_req = (state_q == sys_pkg::ST_WLOAD);
+
 always_ff @(posedge i_clk or negedge i_rstn) begin
     if (!i_rstn) begin
         state_q <= sys_pkg::ST_IDLE;
@@ -156,15 +159,17 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
         rd_cnt_q <= '0;
         fire_cnt_q <= '0;
         phase_q <= BEAT_W'(sys_pkg::p_raw_beats - 2);
+        wbuf_pend_q <= 1'b0;
     end else begin
         state_q <= state_d;
         adv_q <= adv_d;
- 
+        wbuf_pend_q <= o_wbuf_req;
+
         if (state_q == sys_pkg::ST_WLOAD)
             wl_cnt_q <= wl_cnt_q + 1'b1;
         else
             wl_cnt_q <= '0;
- 
+
         if (running) begin
             if (o_abuf_req)
                 rd_cnt_q <= rd_cnt_q + 1'b1;
@@ -178,12 +183,13 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
     end
 end
 
-assign o_wbuf_req = (state_q == sys_pkg::ST_WLOAD);
 assign wl_addr = waddr_q + WA_W'(wl_cnt_q);
 assign o_wbuf_addr = WMA_W'(wl_addr);
 assign o_abuf_addr = aaddr_q + AA_W'(rd_cnt_q);
  
-assign o_w_load = i_wbuf_rvalid;
+// Qualify weight ICG with the outstanding WBUF read (1-cycle mem latency),
+// not ST_WLOAD alone — last beat's rvalid arrives after leaving WLOAD.
+assign o_w_load = wbuf_pend_q & i_wbuf_rvalid;
 assign o_a_advance = adv_q;
 assign o_a_valid = i_abuf_rvalid;
 assign o_a_data = i_abuf_rdata & {sys_pkg::p_beat_w{i_abuf_rvalid}};

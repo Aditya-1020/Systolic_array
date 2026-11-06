@@ -4,9 +4,10 @@ module OPENROAD_CLKGATE (
     input  wire E,
     output wire GCK
 );
-    reg enable_latched;
+    // Transparent-low latch: sample E while CK is low (ICG behavior).
+    logic enable_latched;
     initial enable_latched = 1'b0;
-    always @* begin
+    always_latch begin
         if (CK === 1'b0)
             enable_latched = E;
     end

@@ -41,11 +41,16 @@ ABUF_BASE = 0x2000
 RBUF_BASE = 0x3000
 
 BEAT_BYTES = 8
-TIMEOUT = 10000
-APB_TIMEOUT = 32
+TIMEOUT = 20000
+APB_TIMEOUT = 128
+
+def apb_clk(dut):
+    """APB domain clock (clk_core / 2)."""
+    return dut.clk_apb
 
 async def apb_write(dut, addr, data, strobe=0xF):
-    await FallingEdge(dut.i_clk)
+    clk = apb_clk(dut)
+    await FallingEdge(clk)
     dut.i_psel.value = 1
     dut.i_penable.value = 0
     dut.i_pwrite.value = 1
@@ -53,8 +58,8 @@ async def apb_write(dut, addr, data, strobe=0xF):
     dut.i_paddr.value = addr
     dut.i_pwdata.value = data & 0xFFFFFFFF
     dut.i_pstrb.value = strobe & 0xF
-    await RisingEdge(dut.i_clk)
-    await FallingEdge(dut.i_clk)
+    await RisingEdge(clk)
+    await FallingEdge(clk)
     dut.i_penable.value = 1
 
     for _ in range(APB_TIMEOUT):
@@ -64,21 +69,22 @@ async def apb_write(dut, addr, data, strobe=0xF):
                 f"APB write error: addr=0x{addr:04x}, "
                 f"data=0x{data:08x}"
             )
-            await RisingEdge(dut.i_clk)
+            await RisingEdge(clk)
             break
-        await RisingEdge(dut.i_clk)
-        await FallingEdge(dut.i_clk)
+        await RisingEdge(clk)
+        await FallingEdge(clk)
     else:
         raise AssertionError(f"APB write timeout: addr=0x{addr:04x}")
 
-    await FallingEdge(dut.i_clk)
+    await FallingEdge(clk)
     dut.i_psel.value = 0
     dut.i_penable.value = 0
     dut.i_pwrite.value = 0
     dut.i_pstrb.value = 0
 
 async def apb_read(dut, addr):
-    await FallingEdge(dut.i_clk)
+    clk = apb_clk(dut)
+    await FallingEdge(clk)
     dut.i_psel.value = 1
     dut.i_penable.value = 0
     dut.i_pwrite.value = 0
@@ -86,8 +92,8 @@ async def apb_read(dut, addr):
     dut.i_paddr.value = addr
     dut.i_pwdata.value = 0
     dut.i_pstrb.value = 0
-    await RisingEdge(dut.i_clk)
-    await FallingEdge(dut.i_clk)
+    await RisingEdge(clk)
+    await FallingEdge(clk)
     dut.i_penable.value = 1
 
     for _ in range(APB_TIMEOUT):
@@ -97,14 +103,14 @@ async def apb_read(dut, addr):
                 f"APB read error: addr=0x{addr:04x}"
             )
             data = int(dut.o_prdata.value)
-            await RisingEdge(dut.i_clk)
+            await RisingEdge(clk)
             break
-        await RisingEdge(dut.i_clk)
-        await FallingEdge(dut.i_clk)
+        await RisingEdge(clk)
+        await FallingEdge(clk)
     else:
         raise AssertionError(f"APB read timeout: addr=0x{addr:04x}")
 
-    await FallingEdge(dut.i_clk)
+    await FallingEdge(clk)
     dut.i_psel.value = 0
     dut.i_penable.value = 0
     return data
@@ -144,16 +150,20 @@ async def reset_dut(dut):
     dut.i_pstrb.value = 0
     dut.i_arst_n.value = 0
 
-    for _ in range(4):
+    for _ in range(8):
         await RisingEdge(dut.i_clk)
 
     await FallingEdge(dut.i_clk)
     dut.i_arst_n.value = 1
 
-    for _ in range(3):
+    # Both reset syncs + divider need a few edges after release.
+    for _ in range(8):
         await RisingEdge(dut.i_clk)
+    for _ in range(4):
+        await RisingEdge(apb_clk(dut))
 
 async def initialize(dut):
+    # i_clk = core; clk_apb = i_clk/2 (functional period ratio matches 300/150).
     cocotb.start_soon(Clock(dut.i_clk, 10, unit="ns").start())
     await reset_dut(dut)
 
@@ -205,7 +215,9 @@ async def wait_done(dut, timeout=TIMEOUT):
                 f"state={peek(dut, 'seq_state')} bad_q={peek(dut, 'u_seq_ctrl.bad_q')}"
             )
 
-        if done_seen and not (status & STATUS_BUSY):
+        # Require BUSY seen so a sticky DONE from the previous job cannot
+        # satisfy completion before the new run has started.
+        if seen_busy and done_seen and not (status & STATUS_BUSY):
             return status
 
     raise AssertionError(
@@ -333,8 +345,7 @@ async def test_sys_top_apb_int8_resident_weights(dut):
         waddr=0, aaddr=0, caddr=0,
         shift=7, rounding=0, relu=0, w_load=1
     )
-
-    # Second run reuses the resident PE weights.
+    # Second run: same as original resident test.
     await run_int8_job(
         dut, weights, second_activations,
         waddr=0, aaddr=1, caddr=40,

@@ -12,8 +12,7 @@ module round #(
 genvar lane;
 generate
     for (lane = 0; lane < N; lane++) begin : g_lane
-        logic signed [ACC_W:0] x_ext, shifted;
-        logic signed [ACC_W:0] bias_ext, sum_ext;
+        logic signed [ACC_W:0] x_ext, bias_ext, sum_ext;
         logic [ACC_W:0] bias_bits;
 
         always_comb begin
@@ -21,8 +20,8 @@ generate
             bias_bits = (i_shift == '0) ? '0 : {1'b0, i_round_const};
             bias_ext = $signed(bias_bits);
             sum_ext = x_ext + bias_ext;
-            shifted = sum_ext >>> i_shift;
-            o_data[lane*ACC_W +: ACC_W] = shifted[ACC_W-1:0];
+            // Truncate after arithmetic shift; MSB of sum_ext is only for headroom.
+            o_data[lane*ACC_W +: ACC_W] = ACC_W'(sum_ext >>> i_shift);
         end
     end
 endgenerate

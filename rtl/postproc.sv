@@ -24,9 +24,7 @@ logic [N*ACC_W-1:0] round_comb;
 logic [N*ACC_W-1:0] round_q;
 logic [N*DW-1:0] relu_comb;
 logic [N*DW-1:0] relu_q;
-logic stage1_valid_q;
-logic stage2_valid_q;
-logic pp_fire;
+logic stage1_valid_q, stage2_valid_q, pp_fire;
 
 assign pp_fire = i_post_proc_en & i_arr_valid;
 
@@ -37,18 +35,18 @@ round #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W)) u_round (
 
 relu #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_relu (.i_data(round_q), .i_relu_en(i_relu_en), .o_data(relu_comb));
 
+always_ff @(posedge i_clk) begin
+    if (pp_fire)
+        round_q <= round_comb;
+    if (stage1_valid_q)
+        relu_q <= relu_comb;
+end
+
 always_ff @(posedge i_clk or negedge i_rstn) begin
     if (!i_rstn) begin
-        round_q <= '0;
-        relu_q <= '0;
         stage1_valid_q <= 1'b0;
         stage2_valid_q <= 1'b0;
     end else begin
-        if (pp_fire)
-            round_q <= round_comb;
-        if (stage1_valid_q)
-            relu_q <= relu_comb;
-
         stage1_valid_q <= pp_fire;
         stage2_valid_q <= stage1_valid_q;
     end

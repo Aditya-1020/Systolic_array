@@ -17,7 +17,6 @@ module res_wr #(
     input wire [N*DW-1:0] i_pp_data,
     input wire i_raw_valid,
     input wire [N*ACC_W-1:0] i_raw_data,
-    input wire [BEAT_W-1:0] i_raw_beat,
     output logic o_rbuf_req,
     output logic [sys_pkg::p_rbuf_aw-1:0] o_rbuf_addr,
     output logic [sys_pkg::p_beat_w-1:0] o_rbuf_wdata,
@@ -66,7 +65,6 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
         rows_q <= '0;
         raw_active_q <= 1'b0;
         raw_beat_q <= '0;
-        raw_data_q <= '0;
     end else if (i_run_start) begin
         rows_q <= '0;
         raw_active_q <= 1'b0;
@@ -77,7 +75,6 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
 
         if (raw_mode) begin
             if (i_raw_valid) begin
-                raw_data_q <= i_raw_data;
                 raw_active_q <= 1'b1;
                 raw_beat_q <= '0;
             end else if (raw_active_q) begin
@@ -92,6 +89,12 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
             raw_active_q <= 1'b0;
             raw_beat_q <= '0;
         end
+    end
+end
+
+always_ff @(posedge i_clk) begin
+    if (raw_mode & i_raw_valid) begin
+        raw_data_q <= i_raw_data;
     end
 end
 

@@ -72,7 +72,7 @@ always_ff @(posedge clk_adv or negedge i_rstn) begin
     if (!i_rstn)
         valid_q <= '0;
     else
-        valid_q <= (valid_q << 1) | i_a_valid;
+        valid_q <= (valid_q << 1) | VALID_LAT'(i_a_valid);
 end
 
 assign o_c_valid = valid_q[VALID_LAT-1];
