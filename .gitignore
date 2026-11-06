@@ -19,4 +19,4 @@ sta_out/
 rtl-*
 tb-*
 fakeram/fakeram*
-docs/
+notes/
