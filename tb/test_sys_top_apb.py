@@ -1,4 +1,3 @@
-
 import random
 import cocotb
 from cocotb.clock import Clock
@@ -177,7 +176,6 @@ async def configure_job(
     await apb_write(dut, CSR_COUNT, count)
     await apb_write(dut, CSR_PPCFG, ppcfg)
     await apb_write(dut, CSR_CTRL, ctrl | CTRL_START)
-    await apb_write(dut, CSR_CTRL, ctrl)
 
 
 def peek(dut, path):
@@ -187,7 +185,7 @@ def peek(dut, path):
             signal = getattr(signal, name)
         return int(signal.value)
     except Exception:
-        return "N/A"
+        return None
 
 async def wait_done(dut, timeout=TIMEOUT):
     seen_busy = False
@@ -201,50 +199,21 @@ async def wait_done(dut, timeout=TIMEOUT):
         done_seen |= bool(status & STATUS_DONE)
 
         if status & STATUS_ERR:
-            signals = (
-                "busy", "run_start", "done_set", "err_set",
-                "u_seq_ctrl.state_q", "u_seq_ctrl.bad_q",
-                "u_seq_ctrl.i_start", "u_seq_ctrl.i_count",
-                "u_seq_ctrl.wl_cnt_q", "u_seq_ctrl.rd_cnt_q",
-                "u_seq_ctrl.fire_cnt_q", "u_seq_ctrl.adv_q",
-            )
-            details = []
-            for path in signals:
-                obj = dut
-                try:
-                    for part in path.split("."):
-                        obj = getattr(obj, part)
-                    details.append(f"{path}={int(obj.value)}")
-                except (AttributeError, ValueError):
-                    details.append(f"{path}=UNAVAILABLE")
-
             raise AssertionError(
-                f"Accelerator ERR at cycle {cycle}, "
-                f"STATUS=0x{status:08X}\n"
-                + "\n".join(details)
+                f"Accelerator ERR at poll {cycle}: STATUS=0x{status:08X} "
+                f"busy={peek(dut, 'busy')} err_set={peek(dut, 'err_set')} "
+                f"state={peek(dut, 'seq_state')} bad_q={peek(dut, 'u_seq_ctrl.bad_q')}"
             )
 
         if done_seen and not (status & STATUS_BUSY):
             return status
 
-    dut._log.error(
-        "APB timeout: busy_seen=%s done_seen=%s status=0x%08x",
-        seen_busy, done_seen, last_status
+    raise AssertionError(
+        f"Accelerator completion timeout: STATUS=0x{last_status:08X} "
+        f"busy_seen={seen_busy} done_seen={done_seen} "
+        f"busy={peek(dut, 'busy')} state={peek(dut, 'seq_state')} "
+        f"all_written={peek(dut, 'all_written')}"
     )
-
-    signals = (
-        "busy", "run_start", "done_set", "err_set",
-        "c_valid", "pp_valid", "all_written",
-        "u_seq_ctrl.state_q", "u_seq_ctrl.bad_q",
-        "u_seq_ctrl.wl_cnt_q", "u_seq_ctrl.rd_cnt_q",
-        "u_seq_ctrl.fire_cnt_q", "u_seq_ctrl.adv_q",
-        "u_seq_ctrl.i_start", "u_seq_ctrl.i_count",
-    )
-
-    for name in signals:
-        dut._log.error("%s = %s", name, peek(dut, name))
-
-    raise AssertionError("Accelerator completion timeout")
 
 
 async def check_int8(dut, expected, caddr):
@@ -310,6 +279,24 @@ async def run_raw_job(
     )
     await wait_done(dut)
     await check_raw(dut, expected, caddr)
+
+@cocotb.test()
+async def test_sys_top_apb_buffer_write_readback(dut):
+    await initialize(dut)
+    patterns = [
+        0x0123456789ABCDEF,
+        0xFEDCBA9876543210,
+        0xAAAAAAAA55555555,
+        0x80017FFE00FFAA55,
+    ]
+    for base, label in ((WBUF_BASE, "WBUF"), (ABUF_BASE, "ABUF")):
+        for index, expected in enumerate(patterns):
+            await apb_write64(dut, base + index * BEAT_BYTES, expected)
+        for index, expected in enumerate(patterns):
+            actual = await apb_read64(dut, base + index * BEAT_BYTES)
+            assert actual == expected, (
+                f"{label} beat {index}: expected=0x{expected:016X} got=0x{actual:016X}"
+            )
 
 @cocotb.test()
 async def test_sys_top_apb_csr_readback(dut):
