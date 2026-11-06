@@ -39,8 +39,10 @@ COCOTB_TEST_MODULES := $(MODULE)
 
 GL_TAG ?= gl
 
+# ICG sim helpers first so PDK latch models are overridden via -D guards.
 VERILOG_SOURCES := \
     $(TB_DIR)/models/sky130_dlclkp_sim.v \
+    $(TB_DIR)/models/nangate_clkgate_sim.v \
     $(NETLIST) \
     $(CELL_LIBS) \
     $(TB_DIR)/models/fakeram_sim.v
@@ -51,10 +53,13 @@ COMPILE_ARGS += \
     --timing \
     -Wno-fatal \
     -Wno-PINMISSING \
+    -Wno-ASSIGNIN \
     -DFUNCTIONAL \
+    -DTETRAMAX \
     --timescale 1ns/1ps \
     "-DUNIT_DELAY=$(if $(filter-out 0,$(GL_DELAY)),$(HASH)$(GL_DELAY),)" \
-    -DSKY130_FD_SC_HD__DLCLKP_1_V
+    -DSKY130_FD_SC_HD__DLCLKP_1_V \
+    -DNANGATE_CLKGATE_SIM
 
 COMPILE_ARGS += -CFLAGS "-O0 -g0"
 
