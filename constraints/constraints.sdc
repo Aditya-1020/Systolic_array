@@ -1,28 +1,15 @@
-# Timing constraints for accel_top (100 MHz / 10 ns on sky130).
-current_design accel_top
+current_design sys_top
 
-set clk_period 3.33
-set clk_io_pct 0.2
-set io_delay [expr {$clk_period * $clk_io_pct}]
+set clk_period 10.0
+set io_delay   [expr {$clk_period * 0.2}]
 
-set clk_port  [get_ports i_clk]
-set rstn_port [get_ports i_rstn]
+create_clock -name clk -period $clk_period [get_ports i_clk]
+set_false_path -from [get_ports i_arst_n]
 
-create_clock -name clk -period $clk_period $clk_port
-
-set data_inputs {}
+set in_ports {}
 foreach p [all_inputs] {
-    set n [get_property $p name]
-    if {$n ne "i_clk" && $n ne "i_rstn"} {
-        lappend data_inputs $p
-    }
+    if {[get_property $p name] ne "i_clk"} { lappend in_ports $p }
 }
-
-set_false_path -from $rstn_port
-if {[llength $data_inputs] > 0} {
-    set_input_delay $io_delay -clock clk $data_inputs
-}
-if {[llength [all_outputs]] > 0} {
-    set_output_delay $io_delay -clock clk [all_outputs]
-    set_load 0.05 [all_outputs]
-}
+set_input_delay  $io_delay -clock clk $in_ports
+set_output_delay $io_delay -clock clk [all_outputs]
+set_load 0.05 [all_outputs]
