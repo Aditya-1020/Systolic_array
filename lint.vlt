@@ -1,0 +1,14 @@
+`verilator_config
+// PeakRDL-generated CSR: known Verilator noise
+lint_off -rule MULTIDRIVEN -file "*/csr_generated/*"
+lint_off -rule UNUSEDSIGNAL -file "*/csr_generated/*"
+lint_off -rule UNUSEDPARAM -file "*/csr_generated/*"
+// Sim models (filename != module by design)
+lint_off -rule DECLFILENAME -file "*/fakeram_sim.v"
+lint_off -rule DECLFILENAME -file "*/cells_clkgate_sim.v"
+// Intentional open outputs / debug observability
+lint_off -rule PINCONNECTEMPTY -file "*/sys_top.sv"
+lint_off -rule PINCONNECTEMPTY -file "*/sys_datapath.sv"
+lint_off -rule UNUSEDSIGNAL -file "*/sys_top.sv" -match "*seq_state*"
+// Systolic weight shift-register chain: bottom edge unused by construction
+lint_off -rule UNUSEDSIGNAL -file "*/array.sv" -match "*w_wire*"

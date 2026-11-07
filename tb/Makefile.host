@@ -12,8 +12,7 @@ ROOT := $(abspath ..)
 TB_DIR := $(abspath .)
 RTL_DIR := $(ROOT)/rtl
 
-# Number of parallel C++ compile jobs
-JOBS ?= 4
+JOBS ?= $(shell nproc 2>/dev/null || echo 8)
 
 # Enable waveform tracing:
 # RTL default = 1
@@ -50,7 +49,6 @@ VERILOG_SOURCES := \
 HASH := \#
 GL_DELAY ?= 0
 COMPILE_ARGS += \
-    --timing \
     -Wno-fatal \
     -Wno-PINMISSING \
     -Wno-ASSIGNIN \
@@ -61,7 +59,13 @@ COMPILE_ARGS += \
     -DSKY130_FD_SC_HD__DLCLKP_1_V \
     -DNANGATE_CLKGATE_SIM
 
-COMPILE_ARGS += -CFLAGS "-O0 -g0"
+# --timing balloons Verilator C++ (100s of huge TUs). Only enable when delays are requested.
+ifneq ($(GL_DELAY),0)
+COMPILE_ARGS += --timing
+endif
+
+COMPILE_ARGS += -CFLAGS "-O0 -g0" -j $(JOBS)
+BUILD_ARGS += -j $(JOBS) OPT_FAST=-O0 OPT_SLOW=-O0 OPT_GLOBAL=-O0
 
 SIM_BUILD := $(TB_DIR)/sim_build_gl_$(GL_TAG)
 COCOTB_RESULTS_FILE := $(TB_DIR)/results_gl_$(GL_TAG).xml
@@ -79,7 +83,8 @@ tb_top_src := $(filter-out $(sim_sources),$(wildcard $(TB_DIR)/$(TOPLEVEL).sv))
 
 VERILOG_SOURCES := $(rtl_sources) $(sim_sources) $(tb_top_src)
 
-COMPILE_ARGS += --timing -Wno-fatal
+COMPILE_ARGS += --timing -Wno-fatal -j $(JOBS)
+BUILD_ARGS += -j $(JOBS)
 
 # SRAM parameters
 SRAM_DEPTH ?= 64
@@ -100,8 +105,9 @@ ifeq ($(TRACE),1)
     EXTRA_ARGS += --trace
 endif
 
-# Parallel compilation
-MAKEFLAGS += -j$(JOBS)
+# Parallelism belongs in COMPILE_ARGS/BUILD_ARGS (verilate + sim_build sub-make).
+# Do not put -j in MAKEFLAGS: cocotb's `sim: _rm_results regression` races under -j
+# and can delete COCOTB_RESULTS_FILE without re-running the simulation.
 
 export PYTHONPATH := $(TB_DIR):$(TB_DIR)/helper$(if $(PYTHONPATH),:$(PYTHONPATH))
 
@@ -117,6 +123,13 @@ COCOTB_MAKEFILES := $(shell cocotb-config --makefiles)
 
 include $(COCOTB_MAKEFILES)/Makefile.sim
 
+ifdef NETLIST
+$(SIM_BUILD)/Vtop: $(SIM_BUILD)/Vtop.mk
+	@touch $(SIM_BUILD)/Vtop__pch.h.fast.gch $(SIM_BUILD)/Vtop__pch.h.slow.gch
+	$(MAKE) -C $(SIM_BUILD) $(BUILD_ARGS) \
+	    VK_PCH_I_FAST= VK_PCH_I_SLOW= \
+	    -f Vtop.mk
+endif
 
 .PHONY: help test test-all
 

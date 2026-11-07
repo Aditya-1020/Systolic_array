@@ -18,6 +18,7 @@ async def test_systolic_array_single_vector_gemm(dut):
     dut.i_a_advance.value = 0
     dut.i_a_valid.value = 0
     dut.i_a_data.value = 0
+    dut.i_clear.value = 0
 
     await pulse_clock(dut.i_clk)
     await pulse_clock(dut.i_clk)
@@ -36,7 +37,8 @@ async def test_systolic_array_single_vector_gemm(dut):
     dut.i_w_load.value = 0
     dut.i_w_data.value = 0
 
-    lat = 6 * N - 3
+    pe_lat = 7
+    lat = pe_lat * (2 * N - 1)
     for cycle in range(lat):
         dut.i_a_advance.value = 1
         dut.i_a_data.value = pack_lanes(activations, DW) if cycle == 0 else 0

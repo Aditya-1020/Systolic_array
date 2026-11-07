@@ -4,6 +4,8 @@ from helper.generic import pulse_clock, pack_lanes, unpack_lanes
 N = 8
 DW = 8
 ACC_W = 19
+ROUND_LAT = 5
+RELU_LAT = 6
 
 
 @cocotb.test()
@@ -30,19 +32,18 @@ async def test_postproc_two_gated_stages(dut):
     dut.i_sys_data.value = pack_lanes(data, ACC_W)
     dut.i_arr_valid.value = 1
 
-    await pulse_clock(dut.i_clk)
+    await pulse_clock(dut.i_clk)  # S0
     dut.i_arr_valid.value = 0
-    await pulse_clock(dut.i_clk)
+    for _ in range(ROUND_LAT - 1):
+        await pulse_clock(dut.i_clk)
     assert int(dut.o_round_valid.value) == 1
     assert unpack_lanes(dut.o_round_data, N, ACC_W) == data
 
-    # S3: relu
-    await pulse_clock(dut.i_clk)
+    await pulse_clock(dut.i_clk)  # S4 relu
     assert int(dut.o_relu_valid.value) == 1
     expected = [0, 0, 0, 0, 0, 1, 127, 127]
     assert unpack_lanes(dut.o_post_proc_data, N, DW) == expected
 
-    # Pipeline drains; data flops hold.
     await pulse_clock(dut.i_clk)
     assert int(dut.o_round_valid.value) == 0
     assert int(dut.o_relu_valid.value) == 0
