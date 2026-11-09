@@ -29,6 +29,7 @@ make metrics PLATFORM=sky130hd RUN_TAG=baseline STAGE=place
 make report PLATFORM=sky130hd
 make gui PLATFORM=sky130hd GUI_TARGET=place
 make gl-regress PLATFORM=sky130hd RUN_TAG=baseline STAGE=synth
+make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1
 make presta PLATFORM=sky130hd
 ```
 
