@@ -17,8 +17,8 @@ RUN_TAG ?= base
 FLOW_VARIANT ?= base
 PLACEMENT ?= rtlmp
 STAGE ?= synth
-STA_STAGE ?= $(if $(filter synth,$(ANALYSIS_STAGE)),latest,$(ANALYSIS_STAGE))
-METRICS_STAGE ?= $(if $(filter synth,$(ANALYSIS_STAGE)),place,$(ANALYSIS_STAGE))
+STA_STAGE ?= $(if $(filter synth,$(STAGE)),latest,$(STAGE))
+METRICS_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
 QUERY_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
 ANALYSIS_STAGE ?= $(if $(filter synth,$(STAGE)),final,$(STAGE))
 GUI_TARGET ?= final
@@ -153,24 +153,24 @@ report:
 	@$(ASICFLOW) report $(FLOW_ARGS) --limit "$(or $(LIMIT),20)" $(if $(DB),--db "$(DB)",)
 
 set-baseline:
-	@$(ASICFLOW) set-baseline $(FLOW_ARGS) --stage "$(STAGE)" $(if $(BASELINE_TAG),--tag "$(BASELINE_TAG)",)
+	@$(ASICFLOW) set-baseline $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)" $(if $(BASELINE_TAG),--tag "$(BASELINE_TAG)",)
 
 summary:
-	@$(ASICFLOW) summary $(FLOW_ARGS) --stage "$(STAGE)" $(if $(BASELINE_TAG),--baseline "$(BASELINE_TAG)",)
+	@$(ASICFLOW) summary $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)" $(if $(BASELINE_TAG),--baseline "$(BASELINE_TAG)",)
 
 regression:
-	@$(ASICFLOW) regression $(FLOW_ARGS) --stage "$(STAGE)" --baseline "$(or $(BASELINE_TAG),baseline)"
+	@$(ASICFLOW) regression $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)" --baseline "$(or $(BASELINE_TAG),baseline)"
 
 analyze:
 	@test -n "$(WHAT)" || { echo 'Usage: make analyze WHAT=path-groups|fanout|congestion|buffers|macros|area|wirelength|clocks|unconstrained'; exit 2; }
-	@$(ASICFLOW) analyze "$(WHAT)" $(FLOW_ARGS) --stage "$(STAGE)"
+	@$(ASICFLOW) analyze "$(WHAT)" $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)"
 
 dataset:
-	@$(ASICFLOW) dataset --ingest $(FLOW_ARGS) --stage "$(STAGE)"
+	@$(ASICFLOW) dataset --ingest $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)"
 
 compare-best:
 	@test -n "$(TAGS)" || { echo "Usage: make compare-best TAGS='tag1 tag2 tag3'"; exit 2; }
-	@$(ASICFLOW) compare best $(TAGS) $(FLOW_ARGS) --stage "$(STAGE)"
+	@$(ASICFLOW) compare best $(TAGS) $(FLOW_ARGS) --stage "$(ANALYSIS_STAGE)"
 
 netlist:
 	@$(ASICFLOW) netlist $(FLOW_ARGS) --stage "$(STAGE)"
