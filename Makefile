@@ -91,7 +91,8 @@ help:
 	  '  make validate PLATFORM=sky130hd|nangate45' \
 	  '  make synth|floorplan|place|cts|route|finish|flow RUN_TAG=baseline' \
 	  '  make sta-pvt STAGE=latest | make metrics STAGE=place' \
-	  '  make metrics-all | make report | make query CATEGORY=timing' \
+	  '  make metrics-all | make report | make query CATEGORY=timing' \\
+	  '  make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1' \\
 	  '  make gui GUI_TARGET=place | make place-gen SIDE=left NAME=left' \
 	  '  make lint | test | regress | gl-check | gl-regress'
 
