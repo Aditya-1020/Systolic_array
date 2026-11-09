@@ -14,7 +14,7 @@ export PDK_ROOT="$HOME/eda/.volare"
 Clone ASICFlow beside this repository, or set `ASICFLOW_REPO` to its location:
 
 ```bash
-git clone https://github.com/Aditya-1020/orfs-custom.git ../orfs-custom
+git clone https://github.com/Aditya-1020/orfs-custom.git ../orfs-custom-flow
 make install
 ```
 
