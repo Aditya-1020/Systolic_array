@@ -3,9 +3,9 @@
 MAKEFLAGS += --no-builtin-rules
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-PYTHON ?= $(if $(wildcard $(ROOT)/.venv/bin/python3),$(ROOT)/.venv/bin/python3,python3)
+ASICFLOW_REPO ?= $(abspath $(ROOT)/../orfs-custom-flow)
+PYTHON ?= $(if $(wildcard $(ASICFLOW_REPO)/.venv/bin/python3),$(ASICFLOW_REPO)/.venv/bin/python3,$(if $(wildcard $(ROOT)/.venv/bin/python3),$(ROOT)/.venv/bin/python3,python3))
 PIP ?= $(PYTHON) -m pip
-ASICFLOW_REPO ?= $(abspath $(ROOT)/../orfs-custom)
 ASICFLOW := $(PYTHON) -m asicflow.flow
 PEAKRDL ?= peakrdl
 
@@ -16,7 +16,7 @@ endif
 RUN_TAG ?= base
 FLOW_VARIANT ?= base
 PLACEMENT ?= rtlmp
-STAGE ?= latest
+STAGE ?= synth
 GUI_TARGET ?= final
 
 ORFS_FLOW ?= $(HOME)/eda/orfs-nix/OpenROAD-flow-scripts/flow
@@ -30,15 +30,26 @@ export ROOT_DIR := $(ROOT)
 export ORFS_FLOW PDK_ROOT PLATFORM RUN_TAG FLOW_VARIANT PLACEMENT
 export DESIGN_CONFIG WORK_HOME ASICFLOW_CONFIG_DIR ASICFLOW_DESIGN_PROFILE
 
+ifneq ($(strip $(CORE_UTILIZATION)),)
+export CORE_UTILIZATION
+endif
+ifneq ($(strip $(CORE_ASPECT_RATIO)),)
+export CORE_ASPECT_RATIO
+endif
+ifneq ($(strip $(CORE_MARGIN)),)
+export CORE_MARGIN
+endif
+
 FLOW_ARGS = --platform "$(PLATFORM)" --run-tag "$(RUN_TAG)" --flow-variant "$(FLOW_VARIANT)" --placement "$(PLACEMENT)" --design-config "$(DESIGN_CONFIG)" --work-home "$(WORK_HOME)" --config-dir "$(ASICFLOW_CONFIG_DIR)" --design-profile "$(ASICFLOW_DESIGN_PROFILE)"
+RESULTS_DIR := $(WORK_HOME)/results/$(PLATFORM)/systolic_array/$(FLOW_VARIANT)
 RTL_FILELIST := $(ROOT)/rtl/files.f
-RTL_SOURCES := $(addprefix $(ROOT)/rtl/,$(shell sed -e 's/[[:space:]]*#.*$$//' -e '/^[[:space:]]*$$/d' "$(RTL_FILELIST)"))
+RTL_SOURCES := $(addprefix $(ROOT)/rtl/,$(shell sed -e 's/[[:space:]]*#.*$$//' -e '/^[[:space:]]*$$/d' "$(RTL_FILELIST)")) $(ROOT)/rtl/cells_clkgate.v
 TB := $(ROOT)/tb
 CSR_RDL := $(ROOT)/csr/my_csr.rdl
 CSR_OUT := $(ROOT)/rtl/csr_generated
 FAKERAM_TECH := $(if $(filter sky130hd,$(PLATFORM)),sky130,$(PLATFORM))
 FAKERAM_DIR := $(ROOT)/fakeram/$(FAKERAM_TECH)
-FAKERAM_CONFIG := $(FAKERAM_DIR)_fakeram.cfg
+FAKERAM_CONFIG := $(ROOT)/fakeram/$(FAKERAM_TECH)_fakeram.cfg
 
 ifeq ($(PLATFORM),sky130hd)
 CELL_LIBS ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/verilog/primitives.v $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/verilog/sky130_fd_sc_hd.v
@@ -48,19 +59,37 @@ else
 $(error Unsupported PLATFORM '$(PLATFORM)'; use sky130hd or nangate45)
 endif
 
+ifeq ($(STAGE),synth)
+NETLIST_NAME := 1_2_yosys.v
+else ifeq ($(STAGE),floorplan)
+NETLIST_NAME := 2_floorplan.odb.v
+else ifeq ($(STAGE),place)
+NETLIST_NAME := 3_place.odb.v
+else ifeq ($(STAGE),cts)
+NETLIST_NAME := 4_cts.odb.v
+else ifeq ($(STAGE),route)
+NETLIST_NAME := 5_route.odb.v
+else ifneq ($(filter $(STAGE),finish final),)
+NETLIST_NAME := 6_final.v
+else
+NETLIST_NAME :=
+endif
+NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
+FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
+FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
+
 .PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta predict place-predict place-gen metrics metrics-all metrics-export query report set-baseline summary regression analyze dataset compare-best netlist regress regress-frontend gl-check clean distclean synth-sta synth-sta-both
 
 help:
 	@printf '%s\n' \
 	  'ASICFlow / ORFS' \
-	  '  make install [ASICFLOW_REPO=../orfs-custom]' \
+	  '  make install [ASICFLOW_REPO=../orfs-custom-flow]' \
 	  '  make validate PLATFORM=sky130hd|nangate45' \
 	  '  make synth|floorplan|place|cts|route|finish|flow RUN_TAG=baseline' \
 	  '  make sta-pvt STAGE=latest | make metrics STAGE=place' \
 	  '  make metrics-all | make report | make query CATEGORY=timing' \
 	  '  make gui GUI_TARGET=place | make place-gen SIDE=left NAME=left' \
-	  '  make lint | test | regress | gl-check' \
-	  '  RUN_TAG separates experiments; FLOW_VARIANT separates ORFS variants.'
+	  '  make lint | test | regress | gl-check'
 
 install:
 	$(PIP) install -e "$(ASICFLOW_REPO)[dev]"
@@ -161,12 +190,14 @@ regress:
 	$(MAKE) --no-print-directory -C "$(TB)" sim TOPLEVEL=sys_top MODULE=test_sys_top_apb
 
 regress-frontend:
-	@test -f "$(WORK_HOME)/results/$(PLATFORM)/systolic_array/$(FLOW_VARIANT)/0_frontend.v" || { echo 'Frontend netlist not found; run synthesis first and check RTLIL export'; exit 1; }
-	$(MAKE) --no-print-directory -C "$(TB)" sim TOPLEVEL=sys_top MODULE=test_sys_top_apb NETLIST="$(WORK_HOME)/results/$(PLATFORM)/systolic_array/$(FLOW_VARIANT)/0_frontend.v"
+	@test -f "$(FRONTEND_RTLIL)" || { echo "Missing $(FRONTEND_RTLIL); run synthesis first"; exit 1; }
+	@mkdir -p "$(RESULTS_DIR)"
+	yosys -q -p "read_rtlil $(FRONTEND_RTLIL); hierarchy -top sys_top; proc; flatten; opt_clean; write_verilog -noattr $(FRONTEND_V)"
+	$(MAKE) --no-print-directory -C "$(TB)" sim TOPLEVEL=sys_top MODULE=test_sys_top_apb NETLIST="$(FRONTEND_V)"
 
 gl-check: netlist
+	@test -n "$(NETLIST)" || { echo "No gate-level netlist mapping for STAGE=$(STAGE)"; exit 2; }
 	@set -eu; \
-	  test -n "$(NETLIST)" || { echo 'Set NETLIST to the stage netlist path'; exit 2; }; \
 	  test -f "$(NETLIST)" || { echo "Missing $(NETLIST)"; exit 1; }; \
 	  mkdir -p "$(WORK_HOME)/checks"; \
 	  verilator --lint-only -Wall -Wno-fatal --timing -DFUNCTIONAL -DUNIT_DELAY= --top-module sys_top "$(NETLIST)" $(CELL_LIBS) "$(TB)/models/fakeram_sim.v" >"$(WORK_HOME)/checks/gl_lint.log" 2>&1 || { cat "$(WORK_HOME)/checks/gl_lint.log"; exit 1; }; \
