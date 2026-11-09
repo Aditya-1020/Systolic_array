@@ -17,6 +17,10 @@ RUN_TAG ?= base
 FLOW_VARIANT ?= base
 PLACEMENT ?= rtlmp
 STAGE ?= synth
+STA_STAGE ?= $(if $(filter synth,$(ANALYSIS_STAGE)),latest,$(ANALYSIS_STAGE))
+METRICS_STAGE ?= $(if $(filter synth,$(ANALYSIS_STAGE)),place,$(ANALYSIS_STAGE))
+QUERY_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
+ANALYSIS_STAGE ?= $(if $(filter synth,$(STAGE)),final,$(STAGE))
 GUI_TARGET ?= final
 
 ORFS_FLOW ?= $(HOME)/eda/orfs-nix/OpenROAD-flow-scripts/flow
@@ -78,7 +82,7 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta predict place-predict place-gen metrics metrics-all metrics-export query report set-baseline summary regression analyze dataset compare-best netlist regress regress-frontend gl-check clean distclean synth-sta synth-sta-both
+.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export query report set-baseline summary regression analyze dataset compare-best netlist regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
@@ -92,7 +96,8 @@ help:
 	  '  make lint | test | regress | gl-check'
 
 install:
-	$(PIP) install -e "$(ASICFLOW_REPO)[dev]"
+	@test -f "$(ASICFLOW_REPO)/pyproject.toml" || { echo "ASICFlow repository not found: $(ASICFLOW_REPO)"; exit 1; }
+	cd "$(ASICFLOW_REPO)" && $(PIP) install -e '.[dev]'
 
 validate:
 	@test -d "$(ORFS_FLOW)" || { echo "ORFS_FLOW not found: $(ORFS_FLOW)"; exit 1; }
@@ -110,10 +115,10 @@ gui:
 	@$(ASICFLOW) gui "$(GUI_TARGET)" $(FLOW_ARGS)
 
 sta-pvt:
-	@$(ASICFLOW) sta-pvt $(FLOW_ARGS) --stage "$(STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all-corners,) $(if $(STA_PATHS),--paths "$(STA_PATHS)",) $(if $(BASELINE_TAG),--baseline "$(BASELINE_TAG)",)
+	@$(ASICFLOW) sta-pvt $(FLOW_ARGS) --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all-corners,) $(if $(STA_PATHS),--paths "$(STA_PATHS)",) $(if $(BASELINE_TAG),--baseline "$(BASELINE_TAG)",)
 
 sta-shell:
-	@$(ASICFLOW) sta-shell $(FLOW_ARGS) --stage "$(STAGE)" $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
+	@$(ASICFLOW) sta-shell $(FLOW_ARGS) --stage "$(STA_STAGE)" $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
 
 presta:
 	@$(ASICFLOW) presta $(FLOW_ARGS) $(if $(filter 1,$(INTERACTIVE)),--shell,)
@@ -133,7 +138,7 @@ else
 endif
 
 metrics:
-	@$(ASICFLOW) metrics $(FLOW_ARGS) --stage "$(or $(METRICS_STAGE),$(STAGE))" --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" --corners "$(or $(METRICS_CORNERS),default)" $(if $(filter 1,$(METRICS_HPWL)),--hpwl,) $(if $(METRICS_SAIF),--saif "$(METRICS_SAIF)",) --saif-scope "$(or $(METRICS_SAIF_SCOPE),tb/dut)" $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
+	@$(ASICFLOW) metrics $(FLOW_ARGS) --stage "$(METRICS_STAGE)" --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" --corners "$(or $(METRICS_CORNERS),default)" $(if $(filter 1,$(METRICS_HPWL)),--hpwl,) $(if $(METRICS_SAIF),--saif "$(METRICS_SAIF)",) --saif-scope "$(or $(METRICS_SAIF_SCOPE),tb/dut)" $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
 
 metrics-all:
 	@$(ASICFLOW) metrics $(FLOW_ARGS) --all-stages --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" --corners "$(or $(METRICS_CORNERS),default)" $(if $(filter 1,$(METRICS_HPWL)),--hpwl,) $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
@@ -142,7 +147,7 @@ metrics-export:
 	@$(ASICFLOW) metrics $(FLOW_ARGS) --export "$(or $(METRICS_FEATURES),$(ROOT)/build/analysis/features.csv)" --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
 
 query:
-	@$(ASICFLOW) query $(FLOW_ARGS) --stage "$(STAGE)" --category "$(or $(CATEGORY),timing)" $(if $(DB),--db "$(DB)",)
+	@$(ASICFLOW) query $(FLOW_ARGS) --stage "$(QUERY_STAGE)" --category "$(or $(CATEGORY),timing)" $(if $(DB),--db "$(DB)",)
 
 report:
 	@$(ASICFLOW) report $(FLOW_ARGS) --limit "$(or $(LIMIT),20)" $(if $(DB),--db "$(DB)",)
@@ -170,15 +175,9 @@ compare-best:
 netlist:
 	@$(ASICFLOW) netlist $(FLOW_ARGS) --stage "$(STAGE)"
 
-synth-sta:
-	$(MAKE) --no-print-directory synth
-	$(MAKE) --no-print-directory sta-pvt STAGE=synth
-
-synth-sta-both:
-	$(MAKE) --no-print-directory synth PLATFORM=sky130hd RUN_TAG="$(RUN_TAG)"
-	$(MAKE) --no-print-directory synth PLATFORM=nangate45 RUN_TAG="$(RUN_TAG)"
-	$(MAKE) --no-print-directory sta-pvt PLATFORM=sky130hd RUN_TAG="$(RUN_TAG)" STAGE=synth
-	$(MAKE) --no-print-directory sta-pvt PLATFORM=nangate45 RUN_TAG="$(RUN_TAG)" STAGE=synth
+presta-both:
+	$(MAKE) --no-print-directory presta PLATFORM=sky130hd RUN_TAG="$(RUN_TAG)"
+	$(MAKE) --no-print-directory presta PLATFORM=nangate45 RUN_TAG="$(RUN_TAG)"
 
 lint:
 	verilator --lint-only -Wall -Wno-fatal $(ROOT)/lint.vlt $(RTL_SOURCES) --top-module sys_top
