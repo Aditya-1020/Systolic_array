@@ -18,8 +18,8 @@ FLOW_VARIANT ?= base
 PLACEMENT ?= rtlmp
 STAGE ?= synth
 STA_STAGE ?= $(if $(filter synth,$(STAGE)),latest,$(STAGE))
-METRICS_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
-QUERY_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
+METRICS_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
+QUERY_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
 ANALYSIS_STAGE ?= $(if $(filter synth,$(STAGE)),final,$(STAGE))
 GUI_TARGET ?= final
 
