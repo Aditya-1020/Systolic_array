@@ -5,9 +5,8 @@ export DESIGN_NAME = sys_top
 export SYNTH_HDL_FRONTEND = slang
 
 RTL_LIST := $(shell sed -e 's/[[:space:]]*#.*$$//' -e '/^[[:space:]]*$$/d' "$(ROOT_DIR)/rtl/files.f")
-export VERILOG_FILES = $(addprefix $(ROOT_DIR)/rtl/,$(RTL_LIST))
+export VERILOG_FILES = $(addprefix $(ROOT_DIR)/rtl/,$(RTL_LIST)) $(ROOT_DIR)/rtl/cells_clkgate.v
 export SDC_FILE = $(ROOT_DIR)/constraints/constraints_$(PLATFORM).sdc
-export VERILOG_DEFINES += -D OPENROAD_CLKGATE
 
 FAKERAM_TECH ?= $(if $(filter sky130hd,$(PLATFORM)),sky130,$(PLATFORM))
 FAKERAM_DIR := $(ROOT_DIR)/fakeram/$(FAKERAM_TECH)
@@ -25,11 +24,13 @@ export GPL_TIMING_DRIVEN = 1
 
 ifeq ($(PLATFORM),sky130hd)
 SKY130_LIB_DIR ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib
+export VERILOG_DEFINES += -D OPENROAD_CLKGATE_SKY130
 export CORNERS = tt ss ff
 export TT_LIB_FILES = $(SKY130_LIB_DIR)/sky130_fd_sc_hd__tt_025C_1v80.lib
 export SS_LIB_FILES = $(SKY130_LIB_DIR)/sky130_fd_sc_hd__ss_100C_1v60.lib
 export FF_LIB_FILES = $(SKY130_LIB_DIR)/sky130_fd_sc_hd__ff_n40C_1v95.lib
 else ifeq ($(PLATFORM),nangate45)
+export VERILOG_DEFINES += -D OPENROAD_CLKGATE_NANGATE45
 export CORNERS = typical
 else
 $(error Unsupported PLATFORM '$(PLATFORM)')
