@@ -13,6 +13,15 @@ module pe #(
     output logic signed [ACC_W-1:0] o_psum
 );
 
+`ifndef SYNTHESIS
+initial begin
+    if (DW != 8)
+        $error("pe currently implements an 8-bit Booth multiplier (DW=%0d)", DW);
+    if (ACC_W < 2*DW)
+        $error("pe ACC_W must be at least 2*DW (ACC_W=%0d, DW=%0d)", ACC_W, DW);
+end
+`endif
+
 localparam int NL = $clog2(ACC_W);
 localparam int KL = NL / 2;
 
