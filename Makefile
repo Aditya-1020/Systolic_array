@@ -82,7 +82,7 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
+.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
@@ -148,6 +148,10 @@ metrics-all:
 
 metrics-export:
 	@$(ASICFLOW) metrics $(FLOW_ARGS) --export "$(or $(METRICS_FEATURES),$(ROOT)/build/analysis/features.csv)" --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
+
+sweep:
+	@test -n "$(WHAT)" || { echo 'Usage: make sweep WHAT=clock|util|buffering|density|corners|liberty VALUES="..."'; exit 2; }
+	@$(ASICFLOW) sweep "$(WHAT)" $(VALUES) $(FLOW_ARGS) --stage "$(or $(SWEEP_STAGE),finish)" $(if $(filter 1,$(SWEEP_EXECUTE)),--execute,)
 
 query:
 	@$(ASICFLOW) query $(FLOW_ARGS) --stage "$(QUERY_STAGE)" --category "$(or $(CATEGORY),timing)" $(if $(DB),--db "$(DB)",)
