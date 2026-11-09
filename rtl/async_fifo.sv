@@ -18,6 +18,13 @@ module async_fifo #(
 localparam int AW = $clog2(DEPTH);
 localparam int PW = AW + 1;
 localparam logic [PW-1:0] FULL_XOR_MASK = PW'(3) << (AW - 1);
+
+initial begin
+    if (DEPTH < 2 || (DEPTH & (DEPTH - 1)) != 0)
+        $error("async_fifo DEPTH must be a power of two and at least 2 (got %0d)", DEPTH);
+    if (WIDTH < 1)
+        $error("async_fifo WIDTH must be greater than zero (got %0d)", WIDTH);
+end
  
 logic [PW-1:0] wr_bin_q, rd_bin_q;
 logic [PW-1:0] wr_gray_q, rd_gray_q;
