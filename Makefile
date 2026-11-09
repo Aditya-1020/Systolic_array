@@ -18,8 +18,8 @@ FLOW_VARIANT ?= base
 PLACEMENT ?= rtlmp
 STAGE ?= synth
 STA_STAGE ?= $(if $(filter synth,$(STAGE)),latest,$(STAGE))
-METRICS_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
-QUERY_STAGE ?= $(if $(filter synth,$(STAGE)),place,$(STAGE))
+METRICS_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
+QUERY_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
 ANALYSIS_STAGE ?= $(if $(filter synth,$(STAGE)),final,$(STAGE))
 GUI_TARGET ?= final
 
@@ -82,7 +82,7 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export query report set-baseline summary regression analyze dataset compare-best netlist regress regress-frontend gl-check clean distclean
+.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
@@ -92,8 +92,9 @@ help:
 	  '  make synth|floorplan|place|cts|route|finish|flow RUN_TAG=baseline' \
 	  '  make sta-pvt STAGE=latest | make metrics STAGE=place' \
 	  '  make metrics-all | make report | make query CATEGORY=timing' \
+	  '  make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1' \
 	  '  make gui GUI_TARGET=place | make place-gen SIDE=left NAME=left' \
-	  '  make lint | test | regress | gl-check'
+	  '  make lint | test | regress | gl-check | gl-regress'
 
 install:
 	@test -f "$(ASICFLOW_REPO)/pyproject.toml" || { echo "ASICFlow repository not found: $(ASICFLOW_REPO)"; exit 1; }
@@ -101,11 +102,14 @@ install:
 
 validate:
 	@test -d "$(ORFS_FLOW)" || { echo "ORFS_FLOW not found: $(ORFS_FLOW)"; exit 1; }
-	@test -d "$(PDK_ROOT)" || { echo "PDK_ROOT not found: $(PDK_ROOT)"; exit 1; }
+	@test "$(PLATFORM)" != "sky130hd" || test -d "$(PDK_ROOT)" || { echo "PDK_ROOT not found: $(PDK_ROOT)"; exit 1; }
 	@$(ASICFLOW) validate $(FLOW_ARGS)
 	@$(PYTHON) "$(ROOT)/scripts/validate_design.py" --root "$(ROOT)" --platform "$(PLATFORM)" --design-config "$(DESIGN_CONFIG)"
 
-synth floorplan place cts route finish:
+synth:
+	@$(ASICFLOW) synth $(FLOW_ARGS)
+
+floorplan place cts route finish:
 	@$(ASICFLOW) $@ $(FLOW_ARGS) $(if $(filter 1,$(STA_AFTER)),--sta,)
 
 flow:
@@ -145,6 +149,10 @@ metrics-all:
 
 metrics-export:
 	@$(ASICFLOW) metrics $(FLOW_ARGS) --export "$(or $(METRICS_FEATURES),$(ROOT)/build/analysis/features.csv)" --runs "$(or $(METRICS_RUNS),$(RUN_TAG))" $(if $(METRICS_OUTROOT),--outroot "$(METRICS_OUTROOT)",)
+
+sweep:
+	@test -n "$(WHAT)" || { echo 'Usage: make sweep WHAT=clock|util|buffering|density|corners|liberty VALUES="..."'; exit 2; }
+	@$(ASICFLOW) sweep "$(WHAT)" $(VALUES) $(FLOW_ARGS) --stage "$(or $(SWEEP_STAGE),finish)" $(if $(filter 1,$(SWEEP_EXECUTE)),--execute,)
 
 query:
 	@$(ASICFLOW) query $(FLOW_ARGS) --stage "$(QUERY_STAGE)" --category "$(or $(CATEGORY),timing)" $(if $(DB),--db "$(DB)",)
@@ -187,6 +195,11 @@ test:
 
 regress:
 	$(MAKE) --no-print-directory -C "$(TB)" sim TOPLEVEL=sys_top MODULE=test_sys_top_apb
+
+gl-regress: netlist
+	@test -n "$(NETLIST)" || { echo "No gate-level netlist mapping for STAGE=$(STAGE)"; exit 2; }
+	@test -f "$(NETLIST)" || { echo "Missing $(NETLIST)"; exit 1; }
+	$(MAKE) --no-print-directory -C "$(TB)" sim TOPLEVEL=sys_top MODULE=test_sys_top_apb NETLIST="$(NETLIST)" CELL_LIBS="$(CELL_LIBS)" GL_TAG="$(or $(GL_TAG),$(PLATFORM)_$(RUN_TAG)_$(STAGE))"
 
 regress-frontend:
 	@test -f "$(FRONTEND_RTLIL)" || { echo "Missing $(FRONTEND_RTLIL); run synthesis first"; exit 1; }

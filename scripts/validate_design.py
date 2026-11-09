@@ -34,6 +34,8 @@ def main() -> int:
     sources = read_filelist(root / "rtl" / "files.f")
     if root / "rtl/sys_top.sv" not in sources:
         raise ValueError("rtl/files.f must include sys_top.sv")
+    if not (root / "rtl/cells_clkgate.v").is_file():
+        raise FileNotFoundError("missing rtl/cells_clkgate.v")
 
     sdc = root / "constraints" / f"constraints_{args.platform}.sdc"
     if not sdc.is_file():
