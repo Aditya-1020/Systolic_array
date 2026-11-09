@@ -153,6 +153,8 @@ test: test-all
 
 test-all:
 	@set -eu; \
+		echo '========== ASYNC FIFO =========='; \
+		$(MAKE) --no-print-directory TOPLEVEL=async_fifo_tb_top MODULE=test_async_fifo sim; \
 		echo '========== PE =========='; \
 		$(MAKE) --no-print-directory TOPLEVEL=pe MODULE=test_pe sim; \
 		echo '========== ROUND =========='; \
