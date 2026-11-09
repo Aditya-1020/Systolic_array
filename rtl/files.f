@@ -11,11 +11,13 @@ array.sv
 systolic_array.sv
 round.sv
 relu.sv
+pp_reg_reg.sv
 postproc.sv
 sys_datapath.sv
 mem_arb.sv
 sram_wrap.sv
 res_wr.sv
+fast_add.sv
 seq_ctrl.sv
 apb_bridge.sv
 csr_generated/sys_csr.sv

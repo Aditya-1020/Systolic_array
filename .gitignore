@@ -24,3 +24,4 @@ fakeram/fakeram*
 notes/
 *.egg-info/
 .pytest_cache/
+tb/*.xml

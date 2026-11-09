@@ -89,7 +89,9 @@ WORK_HOME_RES := $(WORK_HOME)
 endif
 RESULTS_DIR := $(WORK_HOME_RES)/results/$(PLATFORM)/$(DESIGN_NICKNAME)/$(FLOW_VARIANT)
 
-# Netlist names come from the asicflow stage registry (keep in sync with asicflow/config.py).
+# Netlist names are defined only for canonical asicflow stages. STA can use
+# any exact ODB stem (for example, 3_5_place_dp) and must not be rejected here.
+NETLIST_STAGES := synth floorplan place cts route final finish
 ifeq ($(STAGE),synth)
     NETLIST_NAME := 1_2_yosys.v
 else ifeq ($(STAGE),floorplan)
@@ -105,9 +107,9 @@ else ifeq ($(STAGE),final)
 else ifeq ($(STAGE),finish)
     NETLIST_NAME := 6_final.v
 else
-    $(error Unsupported STAGE='$(STAGE)')
+    NETLIST_NAME :=
 endif
-NETLIST := $(RESULTS_DIR)/$(NETLIST_NAME)
+NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 
 # Simulation cell libraries (Makefile owns gate-level sim collateral).
 ifeq ($(PLATFORM),sky130hd)
@@ -146,6 +148,7 @@ help:
 	    '  make validate PLATFORM=sky130hd' \
 	    '  make synth|place|cts|route|finish|flow PLATFORM=sky130hd RUN_TAG=baseline' \
 	    '  make sta-pvt PLATFORM=sky130hd RUN_TAG=baseline STAGE=synth' \
+	    '  make sta-pvt RUN_TAG=pd_60util STAGE=3_5_place_dp  # exact ODB stem' \
 	    '  make place && make sta-pvt STAGE=place   # STAGE must match completed ORFS step' \
 	    '  make sta-shell PLATFORM=sky130hd RUN_TAG=baseline STAGE=synth' \
 	    '  make synth-sta-both RUN_TAG=baseline STAGE=synth' \
@@ -230,6 +233,9 @@ gui_synth gui_floorplan gui_place gui_cts gui_route gui_final:
 
 .PHONY: netlist
 netlist:
+	@case " $(NETLIST_STAGES) " in *" $(STAGE) "*) ;; *) \
+	    echo "ERROR: STAGE='$(STAGE)' has no registered gate-level netlist mapping."; \
+	    echo "Use one of: $(NETLIST_STAGES)"; exit 2 ;; esac
 	@$(FLOW) netlist --stage $(STAGE) $(FLOW_ARGS)
 
 .PHONY: gl-check

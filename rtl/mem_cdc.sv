@@ -50,7 +50,11 @@ always_ff @(posedge i_clk_a) begin
     end
 end
 
-async_fifo #(.WIDTH(REQ_W), .DEPTH(DEPTH)) u_req_fifo (
+async_fifo #(
+    .WIDTH(REQ_W),
+    .DEPTH(DEPTH),
+    .ONEHOT_RD(1'b1)
+) u_req_fifo (
     .wr_clk   (i_clk_a),
     .wr_rstn  (i_rstn_a),
     .wr_en    (req_push),
@@ -73,9 +77,9 @@ assign req_pop = o_b_req & i_b_gnt;
 always_ff @(posedge i_clk_b) begin
     if (!i_rstn_b)
         b_pend_q <= 1'b0;
-    else if (o_b_req & i_b_gnt & ~o_b_we)
+    else if (req_pop & ~o_b_we)
         b_pend_q <= 1'b1;
-    else if (b_pend_q & i_b_rvalid & ~rsp_full)
+    else if (rsp_push)
         b_pend_q <= 1'b0;
 end
 

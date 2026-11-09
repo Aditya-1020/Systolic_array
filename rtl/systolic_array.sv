@@ -11,11 +11,12 @@ module systolic_array #(
     input logic i_a_advance,
     input logic i_a_valid,
     input logic [N*DW-1:0] i_a_data,
+    input logic i_clear,
     output logic o_c_valid,
     output logic [N*ACC_W-1:0] o_c_data
 );
-localparam int HOP = 3;
-localparam int VALID_LAT = 6*N - 3;
+localparam int HOP = 7;
+localparam int VALID_LAT = HOP * (2 * N - 1);
 
 logic clk_w, clk_adv;
 logic [N*DW-1:0] a_skewed;
@@ -70,10 +71,10 @@ generate
     end
 endgenerate
 
-always_ff @(posedge clk_adv) begin
-    if (!i_rstn)
+always_ff @(posedge i_clk) begin
+    if (!i_rstn || i_clear)
         valid_q <= '0;
-    else
+    else if (i_a_advance)
         valid_q <= (valid_q << 1) | VALID_LAT'(i_a_valid);
 end
 

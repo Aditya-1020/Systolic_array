@@ -12,6 +12,7 @@ module sys_datapath #(
     input wire i_a_advance,
     input wire i_a_valid,
     input wire [N*DW-1:0] i_a_data,
+    input wire i_clear,
     input wire i_post_proc_en,
     input wire i_relu_en,
     input wire [SH_W-1:0] i_shift,
@@ -23,7 +24,7 @@ module sys_datapath #(
 );
 logic arr_fire;
 
-assign arr_fire = o_c_valid & i_a_advance;
+assign arr_fire = o_c_valid & i_post_proc_en & ~i_clear;
 
 systolic_array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
     .i_clk      (i_clk),
@@ -33,6 +34,7 @@ systolic_array #(.N(N), .DW(DW), .ACC_W(ACC_W)) u_array (
     .i_a_advance(i_a_advance),
     .i_a_valid  (i_a_valid),
     .i_a_data   (i_a_data),
+    .i_clear    (i_clear),
     .o_c_valid  (o_c_valid),
     .o_c_data   (o_c_data)
 );

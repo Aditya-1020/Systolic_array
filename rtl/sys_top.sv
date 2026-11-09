@@ -48,7 +48,6 @@ reset_sync u_reset_sync_apb  (.clk(clk_apb),  .arstn(i_arst_n), .rstn_sync(rstn_
 logic rstn_apb_csr;
 reset_sync u_reset_sync_apb_csr (.clk(clk_apb), .arstn(i_arst_n), .rstn_sync(rstn_apb_csr));
 
-// reset: leafs distribute sync to logic and cdc, csr keeps async reset sync seperate
 logic rstn_core_leaf;
 logic rstn_apb_leaf;
 always_ff @(posedge clk_core) begin
@@ -69,6 +68,7 @@ sys_csr_pkg::sys_csr__out_t csr_hwif_out;
 logic busy, run_start, done_set, err_set;
 logic busy_apb, run_start_apb, done_set_apb, err_set_apb;
 sys_pkg::ctrl_state_t seq_state;
+logic [5:0] seq_state_oh;   // {DONE, FLUSH, RUN, WLOAD, CHECK, IDLE}
 logic pp_en, relu_en;
 logic [SH_W-1:0] shift;
 logic [ACC_W-1:0] round_const;
@@ -242,7 +242,11 @@ assign cfg_wdata = {
 };
 assign cfg_push = start_rise_apb & ~cfg_full;
 
-async_fifo #(.WIDTH(CFG_W), .DEPTH(4)) u_cfg_fifo (
+async_fifo #(
+    .WIDTH(CFG_W),
+    .DEPTH(4),
+    .ONEHOT_RD(1'b1)
+) u_cfg_fifo (
     .wr_clk   (clk_apb),
     .wr_rstn  (rstn_apb_leaf),
     .wr_en    (cfg_push),
@@ -362,8 +366,12 @@ seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_
     .o_a_data      (a_data),
     .o_beat        (),
     .i_c_valid     (c_valid),
-    .i_all_written (all_written)
+    .i_all_written (all_written),
+    .o_state_oh    (seq_state_oh)
 );
+
+logic dp_active;
+assign dp_active = seq_state_oh[3] | seq_state_oh[4];  // RUN | FLUSH
 
 sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
     .i_clk          (clk_core),
@@ -373,7 +381,8 @@ sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
     .i_a_advance    (a_advance),
     .i_a_valid      (a_valid),
     .i_a_data       (a_data),
-    .i_post_proc_en (pp_en),
+    .i_clear        (run_start),
+    .i_post_proc_en (pp_en & dp_active),
     .i_relu_en      (relu_en),
     .i_shift        (shift),
     .i_round_const  (round_const),
@@ -385,14 +394,8 @@ sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
 
 assign res_mode = pp_en ? sys_pkg::MODE_INT8 : sys_pkg::MODE_RAW;
 
-// res_wr only needs clocks in RUN/FLUSH, plus run_start to clear state.
-logic res_clk, res_cg_en;
-assign res_cg_en = run_start | (seq_state == sys_pkg::ST_RUN) | (seq_state == sys_pkg::ST_FLUSH);
-
-OPENROAD_CLKGATE u_cg_res_wr (.CK(clk_core), .E(res_cg_en), .GCK(res_clk));
-
 res_wr #(.N(N), .DW(DW), .ACC_W(ACC_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_res_wr (
-    .i_clk         (res_clk),
+    .i_clk         (clk_core),
     .i_rstn        (rstn_core_leaf),
     .i_run_start   (run_start),
     .i_mode        (res_mode),
@@ -400,7 +403,7 @@ res_wr #(.N(N), .DW(DW), .ACC_W(ACC_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_res_wr
     .i_count       (count),
     .i_pp_valid    (pp_valid),
     .i_pp_data     (pp_data),
-    .i_raw_valid   (~pp_en & c_valid & a_advance),
+    .i_raw_valid   (~pp_en & c_valid & dp_active & ~run_start),
     .i_raw_data    (c_data),
     .o_rbuf_req    (rbuf_core_req),
     .o_rbuf_addr   (rbuf_core_addr),
