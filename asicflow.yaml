@@ -40,5 +40,20 @@ macros:
   - instance: u_rbuf_mem.g_256x64.u_mem
     model: sram_sp_64x256
 
+modules:
+  pe:
+    top: pe
+    files:
+      - rtl/sys_pkg.sv
+      - rtl/pe.sv
+    frontend: slang
+    liberty: auto
+    constraints: constraints/pe.sdc
+    clock_period: 5.0
+    include_dirs: []
+    defines:
+      - SYNTHESIS
+    parameters: {}
+
 extensions:
   tcl: []

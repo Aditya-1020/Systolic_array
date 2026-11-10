@@ -112,7 +112,7 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate project-validate project-synth project-floorplan project-place project-cts project-route project-finish project-gui project-sta lint test csr fakeram synth floorplan place cts route finish flow gui gui-place sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
+.PHONY: help install validate project-validate project-synth project-floorplan project-place project-cts project-route project-finish project-gui project-sta project-module-sta lint test csr fakeram synth floorplan place cts route finish flow gui gui-place sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
@@ -163,6 +163,10 @@ project-gui:
 
 project-sta:
 	@$(ORFSX) --config "$(PROJECT_CONFIG)" sta --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all,) $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
+
+project-module-sta:
+	@test -n "$(MODULE)" || { echo 'Usage: make project-module-sta MODULE=pe'; exit 2; }
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" module-sta "$(MODULE)"
 
 synth:
 	@$(ASICFLOW) synth $(FLOW_ARGS)
