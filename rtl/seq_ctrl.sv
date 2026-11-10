@@ -119,26 +119,14 @@ assign count_ax = A_END_W'(count_q);
 assign caddr_x  = C_END_W'(caddr_q);
 assign rbeats_x = C_END_W'(rbuf_beats_q);
 
-fast_add #(.W(A_LO_W)) u_a_lo (
-    .a(aaddr_x[A_LO_W-1:0]), .b(count_ax[A_LO_W-1:0]), .cin(1'b0),
-    .sum(a_lo_sum[A_LO_W-1:0]), .cout(a_lo_sum[A_LO_W]));
-fast_add_cs #(.W(A_HI_W), .GROUP_W(2)) u_a_hi (
-    .a(aaddr_x[A_END_W-1:A_LO_W]),
-    .b(count_ax[A_END_W-1:A_LO_W]),
-    .cin(a_cy_q),
-    .sum(a_hi_sum),
-    .cout()
-);
-fast_add #(.W(C_LO_W)) u_c_lo (
-    .a(caddr_x[C_LO_W-1:0]), .b(rbeats_x[C_LO_W-1:0]), .cin(1'b0),
-    .sum(c_lo_sum[C_LO_W-1:0]), .cout(c_lo_sum[C_LO_W]));
-fast_add_cs #(.W(C_HI_W), .GROUP_W(2)) u_c_hi (
-    .a(caddr_x[C_END_W-1:C_LO_W]),
-    .b(rbeats_x[C_END_W-1:C_LO_W]),
-    .cin(c_cy_q),
-    .sum(c_hi_sum),
-    .cout()
-);
+assign a_lo_sum = {1'b0, aaddr_x[A_LO_W-1:0]} +
+                    {1'b0, count_ax[A_LO_W-1:0]};
+assign a_hi_sum = aaddr_x[A_END_W-1:A_LO_W] +
+                  count_ax[A_END_W-1:A_LO_W] + A_HI_W'(a_cy_q);
+assign c_lo_sum = {1'b0, caddr_x[C_LO_W-1:0]} +
+                  {1'b0, rbeats_x[C_LO_W-1:0]};
+assign c_hi_sum = caddr_x[C_END_W-1:C_LO_W] +
+                  rbeats_x[C_END_W-1:C_LO_W] + C_HI_W'(c_cy_q);
 
 always_comb begin
     round_const_d = '0;
