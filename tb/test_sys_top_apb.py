@@ -46,7 +46,7 @@ APB_TIMEOUT = 128
 
 def apb_clk(dut):
     """Independent APB input clock."""
-    return dut.i_clk_apb
+    return dut.i_clk_core_apb
 
 async def apb_write(dut, addr, data, strobe=0xF):
     clk = apb_clk(dut)
@@ -158,13 +158,14 @@ async def reset_dut(dut):
 
     # Independent reset synchronizers need edges after release.
     for _ in range(8):
-        await RisingEdge(dut.i_clk)
+        await RisingEdge(dut.i_clk_core)
     for _ in range(4):
         await RisingEdge(apb_clk(dut))
 
 async def initialize(dut):
     # Core and APB clocks are independently driven at 200 MHz and 100 MHz.
-    cocotb.start_soon(Clock(dut.i_clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.i_clk_core, 5, unit="ns").start())
+    cocotb.start_soon(Clock(dut.i_clk_apb, 10, unit="ns").start())
     await reset_dut(dut)
 
 
