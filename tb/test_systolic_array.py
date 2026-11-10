@@ -57,3 +57,76 @@ async def test_systolic_array_single_vector_gemm(dut):
     ]
     actual = unpack_lanes(dut.o_c_data, N, ACC_W)
     assert actual == expected, f"expected {expected}, got {actual}"
+
+
+async def reset_array(dut):
+    dut.i_clk.value = 0
+    dut.i_rstn.value = 0
+    dut.i_w_load.value = 0
+    dut.i_w_data.value = 0
+    dut.i_a_advance.value = 0
+    dut.i_a_valid.value = 0
+    dut.i_a_data.value = 0
+    dut.i_clear.value = 0
+    await pulse_clock(dut.i_clk)
+    await pulse_clock(dut.i_clk)
+    dut.i_rstn.value = 1
+    await pulse_clock(dut.i_clk)
+
+
+async def advance(dut, valid=0, data=0, count=1):
+    for _ in range(count):
+        dut.i_a_advance.value = 1
+        dut.i_a_valid.value = valid
+        dut.i_a_data.value = data
+        await pulse_clock(dut.i_clk)
+    dut.i_a_advance.value = 0
+    dut.i_a_valid.value = 0
+    dut.i_a_data.value = 0
+
+
+@cocotb.test()
+async def test_valid_pipeline_bubbles_stalls_and_back_to_back(dut):
+    await reset_array(dut)
+    latency = 7 * (2 * N - 1)
+    await advance(dut, valid=1, data=pack_lanes([1] * N, DW))
+    await advance(dut, count=5)
+    await advance(dut, valid=1, data=pack_lanes([2] * N, DW))
+    await advance(dut, count=latency - 6)
+    assert int(dut.o_c_valid.value) == 1, "first token did not emerge after VALID_LAT advances"
+    for _ in range(4):
+        await pulse_clock(dut.i_clk)
+        assert int(dut.o_c_valid.value) == 1, "valid shifted while advance was stalled"
+    await advance(dut, count=1)
+    assert int(dut.o_c_valid.value) == 1, "second token should follow first without a bubble"
+    await advance(dut, count=latency - 1)
+    assert int(dut.o_c_valid.value) == 0, "valid pipeline failed to drain"
+
+
+@cocotb.test()
+async def test_clear_flushes_valid_without_advance(dut):
+    await reset_array(dut)
+    latency = 7 * (2 * N - 1)
+    await advance(dut, valid=1, data=pack_lanes([3] * N, DW), count=12)
+    dut.i_a_advance.value = 0
+    dut.i_clear.value = 1
+    await pulse_clock(dut.i_clk)
+    dut.i_clear.value = 0
+    for _ in range(3):
+        await pulse_clock(dut.i_clk)
+        assert int(dut.o_c_valid.value) == 0, "clear must flush valid state with array clock gated"
+    await advance(dut, count=latency - 1)
+    assert int(dut.o_c_valid.value) == 0, "pre-clear token leaked through valid pipeline"
+
+
+@cocotb.test()
+async def test_valid_latency_counts_enabled_advances(dut):
+    await reset_array(dut)
+    latency = 7 * (2 * N - 1)
+    await advance(dut, valid=1, data=pack_lanes([-1] * N, DW))
+    for _ in range(10):
+        dut.i_a_advance.value = 0
+        await pulse_clock(dut.i_clk)
+        assert int(dut.o_c_valid.value) == 0, "valid advanced while i_a_advance was low"
+    await advance(dut, count=latency - 1)
+    assert int(dut.o_c_valid.value) == 1, "latency must be measured in enabled advances"

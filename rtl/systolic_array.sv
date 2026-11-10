@@ -71,11 +71,13 @@ generate
     end
 endgenerate
 
-always_ff @(posedge i_clk) begin
-    if (!i_rstn || i_clear)
+always_ff @(posedge i_clk or negedge i_rstn) begin
+    if (!i_rstn)
+        valid_q <= '0;
+    else if (i_clear)
         valid_q <= '0;
     else if (i_a_advance)
-        valid_q <= (valid_q << 1) | VALID_LAT'(i_a_valid);
+        valid_q <= {valid_q[VALID_LAT-2:0], i_a_valid};
 end
 
 assign o_c_valid = valid_q[VALID_LAT-1];

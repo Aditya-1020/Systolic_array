@@ -1,7 +1,6 @@
 sys_pkg.sv
 csr_generated/sys_csr_pkg.sv
 reset_sync.sv
-clock_divider.sv
 async_fifo.sv
 cdc_sync_bit.sv
 cdc_pulse_sync.sv
