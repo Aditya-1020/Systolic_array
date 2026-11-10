@@ -4,9 +4,11 @@ MAKEFLAGS += --no-builtin-rules
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ASICFLOW_REPO ?= $(abspath $(ROOT)/../orfs-custom-flow)
-PYTHON ?= $(ASICFLOW_REPO)/.venv/bin/python3
+PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 ASICFLOW := $(PYTHON) -m asicflow.flow
+ORFSX ?= orfsx
+PROJECT_CONFIG ?= $(ROOT)/asicflow.yaml
 PEAKRDL ?= peakrdl
 
 PLATFORM ?= sky130hd
@@ -110,13 +112,14 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui gui-place sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
+.PHONY: help install validate project-validate project-synth project-floorplan project-place project-cts project-route project-finish project-gui project-sta lint test csr fakeram synth floorplan place cts route finish flow gui gui-place sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
 	  'ASICFlow / ORFS' \
 	  '  make install [ASICFLOW_REPO=../orfs-custom-flow]' \
 	  '  make validate PLATFORM=sky130hd|nangate45' \
+	  '  make project-synth | project-place | project-sta | project-gui GUI_TARGET=place' \
 	  '  make synth|floorplan|place|cts|route|finish|flow RUN_TAG=baseline' \
 	  '  make sta-pvt STAGE=latest | make metrics STAGE=place' \
 	  '  make metrics-all | make report | make query CATEGORY=timing' \
@@ -126,13 +129,40 @@ help:
 
 install:
 	@test -f "$(ASICFLOW_REPO)/pyproject.toml" || { echo "ASICFlow repository not found: $(ASICFLOW_REPO)"; exit 1; }
-	cd "$(ASICFLOW_REPO)" && $(PIP) install -e '.[dev]'
+	$(PIP) install -e "$(ASICFLOW_REPO)[dev]"
 
 validate:
 	@test -d "$(ORFS_FLOW)" || { echo "ORFS_FLOW not found: $(ORFS_FLOW)"; exit 1; }
 	@test "$(PLATFORM)" != "sky130hd" || test -d "$(PDK_ROOT)" || { echo "PDK_ROOT not found: $(PDK_ROOT)"; exit 1; }
 	@$(ASICFLOW) validate $(FLOW_ARGS)
 	@$(PYTHON) "$(ROOT)/scripts/validate_design.py" --root "$(ROOT)" --platform "$(PLATFORM)" --design-config "$(DESIGN_CONFIG)"
+
+project-validate:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" validate
+
+project-synth:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run synth
+
+project-floorplan:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run floorplan
+
+project-place:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run place
+
+project-cts:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run cts
+
+project-route:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run route
+
+project-finish:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" run finish
+
+project-gui:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" gui "$(GUI_TARGET)"
+
+project-sta:
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" sta --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all-corners,) $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
 
 synth:
 	@$(ASICFLOW) synth $(FLOW_ARGS)
