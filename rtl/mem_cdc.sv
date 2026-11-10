@@ -85,7 +85,11 @@ end
 
 assign rsp_push = b_pend_q & i_b_rvalid & ~rsp_full;
 
-async_fifo #(.WIDTH(DATA_W), .DEPTH(DEPTH)) u_rsp_fifo (
+async_fifo #(
+    .WIDTH(DATA_W),
+    .DEPTH(DEPTH),
+    .ONEHOT_RD(1'b1)
+) u_rsp_fifo (
     .wr_clk   (i_clk_b),
     .wr_rstn  (i_rstn_b),
     .wr_en    (rsp_push),

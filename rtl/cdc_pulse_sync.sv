@@ -9,7 +9,7 @@ module cdc_pulse_sync (
     output logic o_pulse
 );
 logic toggle_q;
-logic [2:0] sync_q;
+(* ASYNC_REG = "TRUE" *) logic [2:0] sync_q;
 
 always_ff @(posedge src_clk) begin
     if (!src_rstn) begin

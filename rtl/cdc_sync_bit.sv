@@ -6,7 +6,7 @@ module cdc_sync_bit (
     input logic i_async,
     output logic o_sync
 );
-logic [1:0] sync_q;
+(* ASYNC_REG = "TRUE" *) logic [1:0] sync_q;
 always_ff @(posedge clk) begin
     if (!rstn) begin
         sync_q <= 2'b00;

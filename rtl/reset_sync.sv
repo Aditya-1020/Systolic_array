@@ -4,7 +4,7 @@ module reset_sync (
     input logic arstn,
     output logic rstn_sync
 );
-logic [1:0] sync_q;
+(* ASYNC_REG = "TRUE" *) logic [1:0] sync_q;
 
 always_ff @(posedge clk or negedge arstn) begin
     if (!arstn)

@@ -131,7 +131,7 @@ $(SIM_BUILD)/Vtop: $(SIM_BUILD)/Vtop.mk
 	    -f Vtop.mk
 endif
 
-.PHONY: help test test-all
+.PHONY: help test test-all lint test-systolic test-top
 
 help:
 	@printf '%s\n' \
@@ -173,3 +173,12 @@ test-all:
 		$(MAKE) --no-print-directory TOPLEVEL=mem_arb_tb_top MODULE=test_mem_arb sim; \
 		echo '========== SYS_TOP APB =========='; \
 		$(MAKE) --no-print-directory TOPLEVEL=sys_top MODULE=test_sys_top_apb sim
+
+test-systolic:
+	$(MAKE) --no-print-directory TOPLEVEL=systolic_array MODULE=test_systolic_array sim
+
+test-top:
+	$(MAKE) --no-print-directory TOPLEVEL=sys_top MODULE=test_sys_top_apb sim
+
+lint:
+	verilator --lint-only --timing -Wno-fatal --top-module sys_top $(VERILOG_SOURCES)
