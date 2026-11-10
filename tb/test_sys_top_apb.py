@@ -45,8 +45,8 @@ TIMEOUT = 20000
 APB_TIMEOUT = 128
 
 def apb_clk(dut):
-    """Independent APB input clock."""
-    return dut.i_clk_core_apb
+    """Return the independently driven APB clock."""
+    return dut.i_clk_apb
 
 async def apb_write(dut, addr, data, strobe=0xF):
     clk = apb_clk(dut)
@@ -385,3 +385,46 @@ async def test_sys_top_apb_int8_extreme_values(dut):
         waddr=0, aaddr=0, caddr=0,
         shift=18, rounding=1, relu=0
     )
+
+async def wait_error(dut, timeout=32):
+    last_status = 0
+    for _ in range(timeout):
+        last_status = await apb_read(dut, CSR_STATUS)
+        if last_status & STATUS_ERR:
+            assert not (last_status & STATUS_BUSY), (
+                f"invalid configuration unexpectedly entered RUN: 0x{last_status:08X}"
+            )
+            return last_status
+    raise AssertionError(
+        f"invalid configuration was not rejected: STATUS=0x{last_status:08X}"
+    )
+
+
+@cocotb.test()
+async def test_sys_top_rejects_abuf_end_past_depth(dut):
+    await initialize(dut)
+    await configure_job(
+        dut, waddr=0, aaddr=63, caddr=0, count=2,
+        pp_en=1, relu=0, rounding=0, shift=0, w_load=0
+    )
+    await wait_error(dut)
+
+
+@cocotb.test()
+async def test_sys_top_rejects_raw_rbuf_end_past_depth(dut):
+    await initialize(dut)
+    await configure_job(
+        dut, waddr=0, aaddr=0, caddr=253, count=1,
+        pp_en=0, relu=0, rounding=0, shift=0, w_load=0
+    )
+    await wait_error(dut)
+
+
+@cocotb.test()
+async def test_sys_top_rejects_weight_end_past_depth(dut):
+    await initialize(dut)
+    await configure_job(
+        dut, waddr=25, aaddr=0, caddr=0, count=1,
+        pp_en=1, relu=0, rounding=0, shift=0, w_load=1
+    )
+    await wait_error(dut)
