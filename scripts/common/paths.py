@@ -1,18 +1,27 @@
+import os
 from pathlib import Path
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_FILE = SCRIPT_ROOT / "paths.yaml"
 
-CONFIG_FILE = REPO_ROOT / "config" / "paths.yaml"
 
-with open(CONFIG_FILE, "r") as f:
-    CONFIG= yaml.safe_load(f)
+def expand_path(value, base):
+    value = os.path.expandvars(os.path.expanduser(str(value)))
+    path = Path(value)
 
-def resolve_path(path):
-    return (REPO_ROOT / path).resolve()
+    if not path.is_absolute():
+        path = base / path
 
-def get_path(category, name):
-    return resolve_path(CONFIG[category][name])
+    return path.resolve()
 
-RTL_DIR = get_path("directories", "rtl")
-SDC_FILE = get_path("files", "design_constraints")
+
+with CONFIG_FILE.open("r", encoding="utf-8") as file:
+    CONFIG = yaml.safe_load(file)
+
+ROOT = expand_path(CONFIG["repository"]["root"], SCRIPT_ROOT)
+
+PATHS = {
+    name: expand_path(value, ROOT)
+    for name, value in CONFIG["paths"].items()
+}
