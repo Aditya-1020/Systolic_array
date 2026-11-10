@@ -1,0 +1,20 @@
+repository:
+  root: "."
+
+design:
+  name: "systolic_array"
+  top_module: "sys_top"
+
+directories:
+  rtl: "rtl"
+  constraints: "constraints"
+  scripts: "scripts"
+
+files:
+  rtl_filelist: "rtl/files.f"
+  design_constraints: "constraints/constraints_sky130hd.sdc"
+  io_constraints: "constraints/io_constraints_sky130hd.tcl"
+
+outputs:
+  synthesis: "build/synthesis"
+  pd: "build/pnr"
