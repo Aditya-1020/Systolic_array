@@ -4,7 +4,7 @@ MAKEFLAGS += --no-builtin-rules
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ASICFLOW_REPO ?= $(abspath $(ROOT)/../orfs-custom-flow)
-PYTHON ?= $(if $(wildcard $(ASICFLOW_REPO)/.venv/bin/python3),$(ASICFLOW_REPO)/.venv/bin/python3,$(if $(wildcard $(ROOT)/.venv/bin/python3),$(ROOT)/.venv/bin/python3,python3))
+PYTHON ?= $(ASICFLOW_REPO)/.venv/bin/python3
 PIP ?= $(PYTHON) -m pip
 ASICFLOW := $(PYTHON) -m asicflow.flow
 PEAKRDL ?= peakrdl
@@ -22,6 +22,31 @@ METRICS_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
 QUERY_STAGE ?= $(if $(filter synth latest,$(STAGE)),place,$(STAGE))
 ANALYSIS_STAGE ?= $(if $(filter synth,$(STAGE)),final,$(STAGE))
 GUI_TARGET ?= final
+
+ifeq ($(GUI_TARGET),synth)
+GUI_ODB := 1_synth.odb
+GUI_ORFS_TARGET := gui_synth
+else ifeq ($(GUI_TARGET),floorplan)
+GUI_ODB := 2_floorplan.odb
+GUI_ORFS_TARGET := gui_floorplan
+else ifeq ($(GUI_TARGET),place)
+GUI_ODB := 3_place.odb
+GUI_ORFS_TARGET := gui_place
+else ifeq ($(GUI_TARGET),cts)
+GUI_ODB := 4_cts.odb
+GUI_ORFS_TARGET := gui_cts
+else ifeq ($(GUI_TARGET),grt)
+GUI_ODB := 5_1_grt.odb
+GUI_ORFS_TARGET := gui_grt
+else ifeq ($(GUI_TARGET),route)
+GUI_ODB := 5_route.odb
+GUI_ORFS_TARGET := gui_route
+else ifeq ($(GUI_TARGET),final)
+GUI_ODB := 6_final.odb
+GUI_ORFS_TARGET := gui_final
+else
+$(error Unsupported GUI_TARGET "$(GUI_TARGET)"; choose synth, floorplan, place, cts, grt, route, or final)
+endif
 
 ORFS_FLOW ?= $(HOME)/eda/orfs-nix/OpenROAD-flow-scripts/flow
 PDK_ROOT ?= $(HOME)/eda/.volare
@@ -44,7 +69,10 @@ ifneq ($(strip $(CORE_MARGIN)),)
 export CORE_MARGIN
 endif
 
-FLOW_ARGS = --platform "$(PLATFORM)" --run-tag "$(RUN_TAG)" --flow-variant "$(FLOW_VARIANT)" --placement "$(PLACEMENT)" --design-config "$(DESIGN_CONFIG)" --work-home "$(WORK_HOME)" --config-dir "$(ASICFLOW_CONFIG_DIR)" --design-profile "$(ASICFLOW_DESIGN_PROFILE)"
+FLOW_ARGS = --platform "$(PLATFORM)" --run-tag "$(RUN_TAG)" --flow-variant "$(FLOW_VARIANT)" \
+    --placement "$(PLACEMENT)" --design-config "$(DESIGN_CONFIG)" --work-home "$(WORK_HOME)" \
+    --config-dir "$(ASICFLOW_CONFIG_DIR)" --design-profile "$(ASICFLOW_DESIGN_PROFILE)"
+
 RESULTS_DIR := $(WORK_HOME)/results/$(PLATFORM)/systolic_array/$(FLOW_VARIANT)
 RTL_FILELIST := $(ROOT)/rtl/files.f
 RTL_SOURCES := $(addprefix $(ROOT)/rtl/,$(shell sed -e 's/[[:space:]]*#.*$$//' -e '/^[[:space:]]*$$/d' "$(RTL_FILELIST)")) $(ROOT)/rtl/cells_clkgate.v
@@ -82,7 +110,7 @@ NETLIST := $(if $(strip $(NETLIST_NAME)),$(RESULTS_DIR)/$(NETLIST_NAME),)
 FRONTEND_RTLIL ?= $(RESULTS_DIR)/1_1_yosys_canonicalize.rtlil
 FRONTEND_V ?= $(RESULTS_DIR)/0_frontend.v
 
-.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
+.PHONY: help install validate lint test csr fakeram synth floorplan place cts route finish flow gui gui-place sta-pvt sta-shell presta presta-both predict place-predict place-gen metrics metrics-all metrics-export sweep query report set-baseline summary regression analyze dataset compare-best netlist regress gl-regress regress-frontend gl-check clean distclean
 
 help:
 	@printf '%s\n' \
@@ -116,7 +144,23 @@ flow:
 	@$(ASICFLOW) flow $(FLOW_ARGS) $(if $(filter 1,$(STA_AFTER)),--sta,)
 
 gui:
-	@$(ASICFLOW) gui "$(GUI_TARGET)" $(FLOW_ARGS)
+	@test -f "$(RESULTS_DIR)/$(GUI_ODB)" || { \
+		echo "Cannot open $(GUI_TARGET): missing $(RESULTS_DIR)/$(GUI_ODB)"; \
+		echo "Matching ODB files available under $(ROOT)/build/runs/$(PLATFORM):"; \
+		find "$(ROOT)/build/runs/$(PLATFORM)" -type f -name "$(GUI_ODB)" -print 2>/dev/null || true; \
+		exit 1; \
+	}
+	@$(MAKE) --no-print-directory -C "$(ORFS_FLOW)" \
+		DESIGN_CONFIG="$(abspath $(DESIGN_CONFIG))" \
+		PLATFORM="$(PLATFORM)" \
+		PDK_ROOT="$(PDK_ROOT)" \
+		RUN_TAG="$(RUN_TAG)" \
+		FLOW_VARIANT="$(FLOW_VARIANT)" \
+		WORK_HOME="$(WORK_HOME)" \
+		"$(GUI_ORFS_TARGET)"
+
+gui-place:
+	@$(MAKE) --no-print-directory gui GUI_TARGET=place
 
 sta-pvt:
 	@$(ASICFLOW) sta-pvt $(FLOW_ARGS) --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all-corners,) $(if $(STA_PATHS),--paths "$(STA_PATHS)",) $(if $(BASELINE_TAG),--baseline "$(BASELINE_TAG)",)
