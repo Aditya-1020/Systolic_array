@@ -1,43 +1,61 @@
 # Systolic Array ASIC Flow
 
-The project uses OpenROAD-flow-scripts (ORFS) for synthesis and physical implementation and ASICFlow for run orchestration, timing analysis, metrics collection and experiment tracking.
+The design uses OpenROAD-flow-scripts (ORFS) for implementation and ASICFlow for project orchestration, PVT STA, metrics and experiment tracking.
 
 ## Setup
 
-Set paths for your local EDA installation:
+Install ASICFlow into this project's virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ../orfs-custom-flow
+```
+
+ASICFlow discovers ORFS and PDK installations from common locations. Override discovery when needed:
 
 ```bash
 export ORFS_FLOW="$HOME/eda/orfs-nix/OpenROAD-flow-scripts/flow"
 export PDK_ROOT="$HOME/eda/.volare"
 ```
 
-Clone ASICFlow beside this repository, or set `ASICFLOW_REPO` to its location:
+## Physical design
+
+The project manifest is `asicflow.yaml`. It records the design top, platform, RTL filelist, constraints, SRAM macro instances, timing defaults and physical settings.
 
 ```bash
-git clone https://github.com/Aditya-1020/orfs-custom.git ../orfs-custom-flow
-make install
+orfsx -c asicflow.yaml validate
+orfsx -c asicflow.yaml run synth
+orfsx -c asicflow.yaml run floorplan
+orfsx -c asicflow.yaml gui floorplan
+orfsx -c asicflow.yaml run place
+orfsx -c asicflow.yaml sta --stage place
+orfsx -c asicflow.yaml sta --all
 ```
 
-## Common commands
+Use a different configuration file or set a project with `orfsx project /path/to/asicflow.yaml`. Run tags and flow variants can be overridden with `RUN_TAG` and `FLOW_VARIANT`.
+
+The existing ORFS design Makefiles are retained for now. They continue to provide the canonical ORFS-specific settings until generated design configurations are implemented and validated. The `config/` YAML files are retained for the legacy `asicflow` CLI and are not yet removed.
+
+## RTL verification and auxiliary flows
+
+The existing Makefile continues to provide lint, Cocotb tests, gate-level regression, CSR generation and Fakeram generation:
 
 ```bash
-make validate PLATFORM=sky130hd
-make synth PLATFORM=sky130hd RUN_TAG=baseline
-make place PLATFORM=sky130hd RUN_TAG=baseline
-make sta-pvt PLATFORM=sky130hd RUN_TAG=baseline STAGE=place
-make metrics PLATFORM=sky130hd RUN_TAG=baseline STAGE=place
-make report PLATFORM=sky130hd
-make gui PLATFORM=sky130hd GUI_TARGET=place
-make gl-regress PLATFORM=sky130hd RUN_TAG=baseline STAGE=synth
-make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1
-make presta PLATFORM=sky130hd
+make lint
+make test
+make regress
+make csr
+make fakeram
 ```
 
-Switch platform with `PLATFORM=nangate45`. Platform configuration selects the ORFS platform, SDC, timing libraries and corresponding Fakeram collateral. `make sta-pvt` defaults to the newest available ODB; `make metrics` defaults to placement; summary, regression and dataset commands default to final.
+These workflows are intentionally independent of ORFS stage execution.
 
-Each experiment is isolated by platform, design, run tag and flow variant under `build/runs/`. Metrics and run history are stored in `build/analysis/metrics.db`.
+## Outputs
 
-RTL simulation and lint remain independent from physical implementation. ASICFlow orchestrates ORFS; it does not replace the ORFS implementation stages.
+ORFS results remain under `build/`, with the native ORFS results/logs/reports hierarchy retained. Analysis outputs are kept with the corresponding run.
 
+## Migration status
 
-`make gl-check` performs gate-level netlist lint. `make gl-regress` runs the APB Cocotb regression against the selected gate-level netlist. `make test` runs the RTL unit and system regressions, including the asynchronous FIFO full/empty and ordering test.
+The manifest is the new project-facing configuration entry point for `orfsx`. The old `asicflow` CLI and legacy config tree remain available during migration; do not delete them until the replacement commands have been tested against both Sky130HD and Nangate45.
