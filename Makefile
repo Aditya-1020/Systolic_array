@@ -162,7 +162,7 @@ project-gui:
 	@$(ORFSX) --config "$(PROJECT_CONFIG)" gui "$(GUI_TARGET)"
 
 project-sta:
-	@$(ORFSX) --config "$(PROJECT_CONFIG)" sta --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all-corners,) $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
+	@$(ORFSX) --config "$(PROJECT_CONFIG)" sta --stage "$(STA_STAGE)" $(if $(filter 1,$(STA_ALL_CORNERS)),--all,) $(if $(STA_CORNER),--corner "$(STA_CORNER)",)
 
 synth:
 	@$(ASICFLOW) synth $(FLOW_ARGS)
