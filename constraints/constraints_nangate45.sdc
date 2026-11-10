@@ -9,7 +9,7 @@ set RESET_PORT i_arst_n
 create_clock -name $CORE_CLOCK -period $CORE_PERIOD [get_ports i_clk_core]
 create_clock -name $APB_CLOCK -period $APB_PERIOD [get_ports i_clk_apb]
 
-set_clock_uncertainty -setup 0.250 [get_clocks {$CORE_CLOCK $APB_CLOCK}]
+set_clock_uncertainty -setup 0.250 [get_clocks [list $CORE_CLOCK $APB_CLOCK]]
 set_clock_uncertainty -hold 0.100 [get_clocks {$CORE_CLOCK $APB_CLOCK}]
 set_clock_transition 0.100 [get_clocks {$CORE_CLOCK $APB_CLOCK}]
 
@@ -25,7 +25,6 @@ set_input_delay -clock $APB_CLOCK -min 0.000 $APB_INPUTS
 set_output_delay -clock $APB_CLOCK -max [expr {$APB_PERIOD * 0.20}] $APB_OUTPUTS
 set_output_delay -clock $APB_CLOCK -min 0.000 $APB_OUTPUTS
 
-set_input_transition 0.100 $APB_INPUTS
 set_driving_cell -lib_cell BUF_X2 -pin Z $APB_INPUTS
 set_load 0.050 $APB_OUTPUTS
 

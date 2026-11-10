@@ -181,4 +181,4 @@ test-top:
 	$(MAKE) --no-print-directory TOPLEVEL=sys_top MODULE=test_sys_top_apb sim
 
 lint:
-	verilator --lint-only --timing -Wno-fatal --top-module sys_top $(rtl_sources)
+	verilator --lint-only --timing -Wno-fatal --top-module sys_top $(VERILOG_SOURCES)

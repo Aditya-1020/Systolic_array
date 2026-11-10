@@ -89,19 +89,27 @@ async def advance(dut, valid=0, data=0, count=1):
 async def test_valid_pipeline_bubbles_stalls_and_back_to_back(dut):
     await reset_array(dut)
     latency = 7 * (2 * N - 1)
-    await advance(dut, valid=1, data=pack_lanes([1] * N, DW))
-    await advance(dut, count=5)
-    await advance(dut, valid=1, data=pack_lanes([2] * N, DW))
-    await advance(dut, count=latency - 6)
-    assert int(dut.o_c_valid.value) == 1, "first token did not emerge after VALID_LAT advances"
-    for _ in range(4):
-        await pulse_clock(dut.i_clk)
-        assert int(dut.o_c_valid.value) == 1, "valid shifted while advance was stalled"
-    await advance(dut, count=1)
-    assert int(dut.o_c_valid.value) == 1, "second token should follow first without a bubble"
-    await advance(dut, count=latency - 1)
-    assert int(dut.o_c_valid.value) == 0, "valid pipeline failed to drain"
 
+    await advance(dut, valid=1, data=pack_lanes([1] * N, DW))
+    for _ in range(5):
+        dut.i_a_advance.value = 0
+        await pulse_clock(dut.i_clk)
+        assert int(dut.o_c_valid.value) == 0, "valid must not advance during a stall"
+
+    await advance(dut, count=latency - 1)
+    assert int(dut.o_c_valid.value) == 1, "first token did not emerge after exactly VALID_LAT advances"
+
+    for _ in range(3):
+        dut.i_a_advance.value = 0
+        await pulse_clock(dut.i_clk)
+        assert int(dut.o_c_valid.value) == 1, "output valid must hold while advance is stalled"
+
+    await advance(dut, valid=1, data=pack_lanes([2] * N, DW))
+    assert int(dut.o_c_valid.value) == 1, "first token should leave as second token enters"
+    await advance(dut, count=latency - 1)
+    assert int(dut.o_c_valid.value) == 1, "second token did not emerge at the expected enabled-cycle latency"
+    await advance(dut)
+    assert int(dut.o_c_valid.value) == 0, "valid pipeline failed to drain"
 
 @cocotb.test()
 async def test_clear_flushes_valid_without_advance(dut):
