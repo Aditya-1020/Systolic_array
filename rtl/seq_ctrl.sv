@@ -41,7 +41,6 @@ module seq_ctrl #(
     output logic o_a_advance,
     output logic o_a_valid,
     output logic [sys_pkg::p_beat_w-1:0] o_a_data,
-    output logic [BEAT_W-1:0] o_beat,
     input wire i_c_valid,
     input wire i_all_written,
 
@@ -341,7 +340,6 @@ assign o_w_load = wbuf_pend_q & i_wbuf_rvalid;
 assign o_a_advance = adv_q;
 assign o_a_valid = abuf_hold_q;
 assign o_a_data = abuf_data_q;
-assign o_beat = phase_q;
 
 assign o_busy = ~st_idle_q;
 assign o_run_start = run_pulse_q[0];

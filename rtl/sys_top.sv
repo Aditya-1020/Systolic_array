@@ -36,14 +36,6 @@ logic rstn_apb;
 reset_sync u_reset_sync_core (.clk(i_clk_core), .arstn(i_arst_n), .rstn_sync(rstn_core));
 reset_sync u_reset_sync_apb  (.clk(i_clk_apb),  .arstn(i_arst_n), .rstn_sync(rstn_apb));
 
-logic rstn_core_leaf;
-logic rstn_apb_leaf;
-always_ff @(posedge i_clk_core) begin
-    rstn_core_leaf <= rstn_core;
-end
-always_ff @(posedge i_clk_apb) begin
-    rstn_apb_leaf  <= rstn_apb;
-end
 
 logic csr_psel, csr_penable, csr_pwrite, csr_pready, csr_pslverr;
 logic [2:0] csr_pprot;
@@ -130,7 +122,7 @@ always_comb begin
 end
 
 always_ff @(posedge i_clk_apb) begin
-    if (!rstn_apb_leaf)
+    if (!rstn_apb)
         irq_q <= 1'b0;
     else if (cfg_push | run_start_apb | ~csr_hwif_out.CTRL.IRQ_EN.value)
         irq_q <= 1'b0;
@@ -141,7 +133,7 @@ assign o_irq = irq_q;
 
 apb_bridge #(.APB_AW(APB_AW)) u_apb_bridge (
     .i_clk         (i_clk_apb),
-    .i_rstn        (rstn_apb_leaf),
+    .i_rstn        (rstn_apb),
     .i_psel        (i_psel),
     .i_penable     (i_penable),
     .i_pwrite      (i_pwrite),
@@ -190,7 +182,7 @@ apb_bridge #(.APB_AW(APB_AW)) u_apb_bridge (
 
 sys_csr u_csr (
     .clk           (i_clk_apb),
-    .arst_n        (rstn_apb_leaf),
+    .arst_n        (rstn_apb),
     .s_apb_psel    (csr_psel),
     .s_apb_penable (csr_penable),
     .s_apb_pwrite  (csr_pwrite),
@@ -207,7 +199,7 @@ sys_csr u_csr (
 
 // CDC: job config
 always_ff @(posedge i_clk_apb) begin
-    if (!rstn_apb_leaf) begin
+    if (!rstn_apb) begin
         start_q_apb <= 1'b0;
     end else begin
         start_q_apb <= csr_hwif_out.CTRL.START.value;
@@ -234,12 +226,12 @@ async_fifo #(
     .ONEHOT_RD(1'b1)
 ) u_cfg_fifo (
     .wr_clk   (i_clk_apb),
-    .wr_rstn  (rstn_apb_leaf),
+    .wr_rstn  (rstn_apb),
     .wr_en    (cfg_push),
     .wr_data  (cfg_wdata),
     .wr_full  (cfg_full),
     .rd_clk   (i_clk_core),
-    .rd_rstn  (rstn_core_leaf),
+    .rd_rstn  (rstn_core),
     .rd_en    (cfg_pop),
     .rd_data  (cfg_rdata),
     .rd_empty (cfg_empty)
@@ -248,7 +240,7 @@ async_fifo #(
 assign cfg_pop = ~cfg_empty & ~start_core;
 
 always_ff @(posedge i_clk_core) begin
-    if (!rstn_core_leaf) begin
+    if (!rstn_core) begin
         start_core <= 1'b0;
         cfg_hold_q <= '0;
     end else if (cfg_pop) begin
@@ -266,50 +258,50 @@ assign {
 
 
 cdc_sync_bit u_busy_sync (
-    .clk(i_clk_apb), .rstn(rstn_apb_leaf), .i_async(busy), .o_sync(busy_apb)
+    .clk(i_clk_apb), .rstn(rstn_apb), .i_async(busy), .o_sync(busy_apb)
 );
 cdc_pulse_sync u_done_sync (
-    .src_clk(i_clk_core), .src_rstn(rstn_core_leaf), .i_pulse(done_set),
-    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb_leaf),  .o_pulse(done_set_apb)
+    .src_clk(i_clk_core), .src_rstn(rstn_core), .i_pulse(done_set),
+    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb),  .o_pulse(done_set_apb)
 );
 cdc_pulse_sync u_err_sync (
-    .src_clk(i_clk_core), .src_rstn(rstn_core_leaf), .i_pulse(err_set),
-    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb_leaf),  .o_pulse(err_set_apb)
+    .src_clk(i_clk_core), .src_rstn(rstn_core), .i_pulse(err_set),
+    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb),  .o_pulse(err_set_apb)
 );
 cdc_pulse_sync u_run_start_sync (
-    .src_clk(i_clk_core), .src_rstn(rstn_core_leaf), .i_pulse(run_start),
-    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb_leaf),  .o_pulse(run_start_apb)
+    .src_clk(i_clk_core), .src_rstn(rstn_core), .i_pulse(run_start),
+    .dst_clk(i_clk_apb),  .dst_rstn(rstn_apb),  .o_pulse(run_start_apb)
 );
 
 // CDC: SW memory ports
 mem_cdc #(.ADDR_W(WBUF_AW), .DATA_W(DATA_W)) u_wbuf_cdc (
-    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb_leaf),
+    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb),
     .i_a_req(wbuf_sw_req), .i_a_we(wbuf_sw_we), .i_a_addr(wbuf_sw_addr),
     .i_a_wdata(wbuf_sw_wdata), .i_a_wmask(wbuf_sw_wmask),
     .o_a_gnt(wbuf_sw_gnt), .o_a_rvalid(wbuf_sw_rvalid), .o_a_rdata(wbuf_sw_rdata),
-    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core_leaf),
+    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core),
     .o_b_req(wbuf_cdc_req), .o_b_we(wbuf_cdc_we), .o_b_addr(wbuf_cdc_addr),
     .o_b_wdata(wbuf_cdc_wdata), .o_b_wmask(wbuf_cdc_wmask),
     .i_b_gnt(wbuf_cdc_gnt), .i_b_rvalid(wbuf_cdc_rvalid), .i_b_rdata(wbuf_cdc_rdata)
 );
 
 mem_cdc #(.ADDR_W(ABUF_AW), .DATA_W(DATA_W)) u_abuf_cdc (
-    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb_leaf),
+    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb),
     .i_a_req(abuf_sw_req), .i_a_we(abuf_sw_we), .i_a_addr(abuf_sw_addr),
     .i_a_wdata(abuf_sw_wdata), .i_a_wmask(abuf_sw_wmask),
     .o_a_gnt(abuf_sw_gnt), .o_a_rvalid(abuf_sw_rvalid), .o_a_rdata(abuf_sw_rdata),
-    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core_leaf),
+    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core),
     .o_b_req(abuf_cdc_req), .o_b_we(abuf_cdc_we), .o_b_addr(abuf_cdc_addr),
     .o_b_wdata(abuf_cdc_wdata), .o_b_wmask(abuf_cdc_wmask),
     .i_b_gnt(abuf_cdc_gnt), .i_b_rvalid(abuf_cdc_rvalid), .i_b_rdata(abuf_cdc_rdata)
 );
 
 mem_cdc #(.ADDR_W(RBUF_AW), .DATA_W(DATA_W)) u_rbuf_cdc (
-    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb_leaf),
+    .i_clk_a(i_clk_apb), .i_rstn_a(rstn_apb),
     .i_a_req(rbuf_sw_req), .i_a_we(rbuf_sw_we), .i_a_addr(rbuf_sw_addr),
     .i_a_wdata(rbuf_sw_wdata), .i_a_wmask(rbuf_sw_wmask),
     .o_a_gnt(rbuf_sw_gnt), .o_a_rvalid(rbuf_sw_rvalid), .o_a_rdata(rbuf_sw_rdata),
-    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core_leaf),
+    .i_clk_b(i_clk_core), .i_rstn_b(rstn_core),
     .o_b_req(rbuf_cdc_req), .o_b_we(rbuf_cdc_we), .o_b_addr(rbuf_cdc_addr),
     .o_b_wdata(rbuf_cdc_wdata), .o_b_wmask(rbuf_cdc_wmask),
     .i_b_gnt(rbuf_cdc_gnt), .i_b_rvalid(rbuf_cdc_rvalid), .i_b_rdata(rbuf_cdc_rdata)
@@ -317,7 +309,7 @@ mem_cdc #(.ADDR_W(RBUF_AW), .DATA_W(DATA_W)) u_rbuf_cdc (
 
 seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_seq_ctrl (
     .i_clk         (i_clk_core),
-    .i_rstn        (rstn_core_leaf),
+    .i_rstn        (rstn_core),
     .i_start       (start_core),
     .i_w_load_en   (cfg_w_load),
     .i_waddr       (cfg_waddr),
@@ -349,7 +341,6 @@ seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_
     .o_a_advance   (a_advance),
     .o_a_valid     (a_valid),
     .o_a_data      (a_data),
-    .o_beat        (),
     .i_c_valid     (c_valid),
     .i_all_written (all_written),
     .o_dp_active   (dp_active)
@@ -359,7 +350,7 @@ logic dp_active;
 
 sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
     .i_clk          (i_clk_core),
-    .i_rstn         (rstn_core_leaf),
+    .i_rstn         (rstn_core),
     .i_w_load       (w_load),
     .i_w_data       (wbuf_core_rdata),
     .i_a_advance    (a_advance),
@@ -380,7 +371,7 @@ assign res_mode = pp_en ? sys_pkg::MODE_INT8 : sys_pkg::MODE_RAW;
 
 res_wr #(.N(N), .DW(DW), .ACC_W(ACC_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_res_wr (
     .i_clk         (i_clk_core),
-    .i_rstn        (rstn_core_leaf),
+    .i_rstn        (rstn_core),
     .i_run_start   (run_start),
     .i_mode        (res_mode),
     .i_caddr       (caddr),
@@ -397,7 +388,7 @@ res_wr #(.N(N), .DW(DW), .ACC_W(ACC_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_res_wr
 );
 
 mem_arb #(.ADDR_W(WBUF_AW), .DATA_W(DATA_W)) u_wbuf_arb (
-    .i_clk(i_clk_core), .i_rstn(rstn_core_leaf),
+    .i_clk(i_clk_core), .i_rstn(rstn_core),
     .i_core_req(wbuf_core_req), .i_core_we(1'b0), .i_core_addr(wbuf_core_addr),
     .i_core_wdata('0), .i_core_wmask('0),
     .o_core_gnt(), .o_core_rvalid(wbuf_core_rvalid), .o_core_rdata(wbuf_core_rdata),
@@ -414,7 +405,7 @@ sram_wrap #(.DEPTH(sys_pkg::p_wbuf_macro_depth), .ADDR_W(WBUF_AW), .DATA_W(DATA_
 );
 
 mem_arb #(.ADDR_W(ABUF_AW), .DATA_W(DATA_W)) u_abuf_arb (
-    .i_clk(i_clk_core), .i_rstn(rstn_core_leaf),
+    .i_clk(i_clk_core), .i_rstn(rstn_core),
     .i_core_req(abuf_core_req), .i_core_we(1'b0), .i_core_addr(abuf_core_addr),
     .i_core_wdata('0), .i_core_wmask('0),
     .o_core_gnt(), .o_core_rvalid(abuf_core_rvalid), .o_core_rdata(abuf_core_rdata),
@@ -431,7 +422,7 @@ sram_wrap #(.DEPTH(sys_pkg::p_abuf_depth), .ADDR_W(ABUF_AW), .DATA_W(DATA_W)) u_
 );
 
 mem_arb #(.ADDR_W(RBUF_AW), .DATA_W(DATA_W)) u_rbuf_arb (
-    .i_clk(i_clk_core), .i_rstn(rstn_core_leaf),
+    .i_clk(i_clk_core), .i_rstn(rstn_core),
     .i_core_req(rbuf_core_req), .i_core_we(1'b1), .i_core_addr(rbuf_core_addr),
     .i_core_wdata(rbuf_core_wdata), .i_core_wmask(rbuf_core_wmask),
     .o_core_gnt(), .o_core_rvalid(), .o_core_rdata(),
