@@ -1,0 +1,80 @@
+project:
+  name: systolic_array
+  top: sys_top
+  platform: sky130hd
+  run_tag: base
+  flow_variant: base
+
+paths:
+  orfs: auto
+  pdk: auto
+  build: build
+
+rtl:
+  root: rtl
+  filelist: files.f
+  frontend: slang
+  include_dirs: []
+  defines: []
+
+constraints:
+  default: constraints/constraints_{platform}.sdc
+  pins:
+    sky130hd: constraints/pins_sky130hd.tcl
+
+physical:
+  design_config: design-configs/sky130hd.mk
+  placement: rtlmp
+  utilization: 65
+  aspect_ratio: 0.90
+  core_margin: 2
+
+timing:
+  liberty: auto
+  clock_period: 5.0
+  jobs: 6
+  default_corners:
+    - tt_025C_1v80
+    - tt_100C_1v80
+    - ss_100C_1v60
+    - ss_100C_1v40
+    - ff_n40C_1v95
+    - ff_100C_1v95
+
+macros:
+  root: fakeram/{fakeram_tech}
+  models:
+    sram_sp_64x64:
+      lef: ${root}/sram_sp_64x64/sram_sp_64x64.lef
+      liberty: ${root}/sram_sp_64x64/sram_sp_64x64.lib
+      blackbox: ${root}/sram_sp_64x64/sram_sp_64x64.bb.v
+      simulation: ${root}/sram_sp_64x64/sram_sp_64x64.v
+    sram_sp_64x256:
+      lef: ${root}/sram_sp_64x256/sram_sp_64x256.lef
+      liberty: ${root}/sram_sp_64x256/sram_sp_64x256.lib
+      blackbox: ${root}/sram_sp_64x256/sram_sp_64x256.bb.v
+      simulation: ${root}/sram_sp_64x256/sram_sp_64x256.v
+  instances:
+    - instance: u_wbuf_mem.g_64x64.u_mem
+      model: sram_sp_64x64
+    - instance: u_abuf_mem.g_64x64.u_mem
+      model: sram_sp_64x64
+    - instance: u_rbuf_mem.g_256x64.u_mem
+      model: sram_sp_64x256
+
+extensions:
+  tcl: []
+
+modules:
+  pe:
+    top: pe
+    files:
+      - rtl/pe.sv
+      - rtl/fast_add.sv
+      - rtl/sys_pkg.sv
+    frontend: slang
+    liberty: auto
+    constraints: null
+    include_dirs: []
+    defines: []
+    parameters: {}
