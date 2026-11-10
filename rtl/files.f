@@ -16,7 +16,6 @@ sys_datapath.sv
 mem_arb.sv
 sram_wrap.sv
 res_wr.sv
-fast_add.sv
 seq_ctrl.sv
 apb_bridge.sv
 csr_generated/sys_csr.sv
