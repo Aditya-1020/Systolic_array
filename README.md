@@ -77,6 +77,41 @@ make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1
 
 These legacy targets continue to use the existing `asicflow` configuration and run layout. Do not mix an `orfsx` run with legacy metrics/STA without deliberately pointing both tools at the same work directory; the current project-first runner and legacy context use different default work-home layouts.
 
+## Standalone RTL module synthesis and STA
+
+Use `orfsx module-sta` to synthesize one module with Yosys and then run OpenSTA on the mapped netlist. This is independent of a full ORFS chip run:
+
+```bash
+orfsx --config asicflow.yaml module-sta pe
+```
+
+The `pe` entry in `asicflow.yaml` includes `rtl/sys_pkg.sv` before `rtl/pe.sv`, because the PE parameter defaults reference `sys_pkg`. It does not include `fast_add.sv`: the current PE implementation contains its adder logic internally and does not instantiate `fast_add`.
+
+The PE has two clock inputs, `i_clk_w` and `i_clk_adv`. The dedicated `constraints/pe.sdc` constrains both at the same period and phase. In the full array they are separately gated versions of the same root clock, so do not declare them asynchronous for this isolated PE analysis. The SDC uses a 20% input/output timing budget and is intended for comparative block analysis; it is not a substitute for signoff constraints including extracted clock-gate and interconnect effects.
+
+Reports and intermediate files are written to:
+
+```
+build/<platform>/<run_tag>/reports/modules/pe/
+├── synth.ys
+├── yosys.log
+├── area.rpt
+├── netlist.v
+├── opensta.log
+├── check_setup.rpt
+├── setup.rpt
+├── hold.rpt
+└── ...
+```
+
+The same command is available through Make:
+
+```bash
+make project-module-sta MODULE=pe
+```
+
+Add another entry under `modules` for each block that needs standalone synthesis and timing analysis. Provide its complete source dependency list, top name, platform Liberty override if needed, and a module-specific SDC when it has nontrivial clocking.
+
 ## RTL verification and auxiliary flows
 
 RTL simulation, lint, CSR generation, Fakeram generation and gate-level regression remain independent of ORFS stage execution:
