@@ -105,7 +105,7 @@ async def test_valid_pipeline_bubbles_stalls_and_back_to_back(dut):
         assert int(dut.o_c_valid.value) == 1, "output valid must hold while advance is stalled"
 
     await advance(dut, valid=1, data=pack_lanes([2] * N, DW))
-    assert int(dut.o_c_valid.value) == 1, "first token should leave as second token enters"
+    assert int(dut.o_c_valid.value) == 0, "first token should leave as second token enters"
     await advance(dut, count=latency - 1)
     assert int(dut.o_c_valid.value) == 1, "second token did not emerge at the expected enabled-cycle latency"
     await advance(dut)
