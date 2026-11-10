@@ -55,7 +55,6 @@ sys_csr_pkg::sys_csr__out_t csr_hwif_out;
 
 logic busy, run_start, done_set, err_set;
 logic busy_apb, run_start_apb, done_set_apb, err_set_apb;
-logic [5:0] seq_state_oh;   // {DONE, FLUSH, RUN, WLOAD, CHECK, IDLE}
 logic pp_en, relu_en;
 logic [SH_W-1:0] shift;
 logic [ACC_W-1:0] round_const;
@@ -333,7 +332,6 @@ seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_
     .o_run_start   (run_start),
     .o_done_set    (done_set),
     .o_err_set     (err_set),
-    .o_state       (),
     .o_pp_en       (pp_en),
     .o_relu_en     (relu_en),
     .o_shift       (shift),
@@ -354,11 +352,10 @@ seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_
     .o_beat        (),
     .i_c_valid     (c_valid),
     .i_all_written (all_written),
-    .o_state_oh    (seq_state_oh)
+    .o_dp_active   (dp_active)
 );
 
 logic dp_active;
-assign dp_active = seq_state_oh[3] | seq_state_oh[4];  // RUN | FLUSH
 
 sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
     .i_clk          (i_clk_core),

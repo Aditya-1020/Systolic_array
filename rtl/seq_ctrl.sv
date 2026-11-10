@@ -22,7 +22,6 @@ module seq_ctrl #(
     output logic o_run_start,
     output logic o_done_set,
     output logic o_err_set,
-    output sys_pkg::ctrl_state_t o_state,
     output logic o_pp_en,
     output logic o_relu_en,
     output logic [SH_W-1:0] o_shift,
@@ -46,9 +45,7 @@ module seq_ctrl #(
     input wire i_c_valid,
     input wire i_all_written,
 
-    // NEW: one-hot copy of state_q, straight from flops (no decode needed by
-    // consumers). Bit order: {DONE, FLUSH, RUN, WLOAD, CHECK, IDLE}
-    output logic [5:0] o_state_oh
+    output logic o_dp_active
 );
 localparam int WL_W = $clog2(N + 1);
 localparam int WA_W = sys_pkg::p_wbuf_aw;
@@ -68,11 +65,10 @@ localparam int C_LO_W = (C_END_W > 4) ? 4 : (C_END_W - 1);
 localparam int C_HI_W = C_END_W - C_LO_W;
 localparam bit WL_LAST_IDLE = (N == 1);
 
-sys_pkg::ctrl_state_t state_q, state_d;
 
-logic st_idle_q, st_check_q, st_wload_q, st_run_q, st_flush_q, st_done_q;
+logic st_idle_q, st_wload_q, st_run_q, st_flush_q, st_done_q;
 logic running_q;
-logic idle_d, check_d, wload_d, run_d, flush_d, done_d;
+logic idle_d, wload_d, run_d, flush_d, done_d;
 logic [3:0] chk_q;
 
 logic [A_END_W-1:0] a_end_q;
@@ -225,20 +221,10 @@ assign chk_exit_bad = chk_q[3] & bad_cfg;
 assign chk_exit_ok = chk_q[3] & ~bad_cfg;
 
 assign idle_d = (st_idle_q & ~start_pulse) | chk_exit_bad | st_done_q;
-assign check_d = accept | chk_q[0] | chk_q[1] | chk_q[2];
 assign wload_d = (chk_exit_ok & w_load_q) | (st_wload_q & ~wl_last_q);
 assign run_d = (chk_exit_ok & ~w_load_q) | (st_wload_q & wl_last_q) | (st_run_q & ~rd_last);
 assign flush_d = (st_run_q & rd_last) | (st_flush_q & ~i_all_written);
 assign done_d = st_flush_q & i_all_written;
-
-always_comb begin
-    state_d = sys_pkg::ST_IDLE;
-    if (check_d) state_d = sys_pkg::ST_CHECK;
-    if (wload_d) state_d = sys_pkg::ST_WLOAD;
-    if (run_d)   state_d = sys_pkg::ST_RUN;
-    if (flush_d) state_d = sys_pkg::ST_FLUSH;
-    if (done_d)  state_d = sys_pkg::ST_DONE;
-end
 
 assign fire = adv_q & i_c_valid;
 assign hit_last = fire & fire_one_q;
@@ -250,9 +236,7 @@ assign o_wbuf_req = st_wload_q;
 
 always_ff @(posedge i_clk) begin
     if (!i_rstn) begin
-        state_q <= sys_pkg::ST_IDLE;
         st_idle_q <= 1'b1;
-        st_check_q <= 1'b0;
         st_wload_q <= 1'b0;
         st_run_q <= 1'b0;
         st_flush_q <= 1'b0;
@@ -278,9 +262,7 @@ always_ff @(posedge i_clk) begin
         abuf_hold_q <= 1'b0;
         abuf_data_q <= '0;
     end else begin
-        state_q <= state_d;
         st_idle_q <= idle_d;
-        st_check_q <= check_d;
         st_wload_q <= wload_d;
         st_run_q <= run_d;
         st_flush_q <= flush_d;
@@ -365,8 +347,7 @@ assign o_busy = ~st_idle_q;
 assign o_run_start = run_pulse_q[0];
 assign o_done_set = st_done_q;
 assign o_err_set = chk_exit_bad | (start_pulse & ~st_idle_q);
-assign o_state = state_q;
-assign o_state_oh = {st_done_q, st_flush_q, st_run_q, st_wload_q, st_check_q, st_idle_q};
+assign o_dp_active = st_run_q | st_flush_q;
 
 assign o_pp_en = pp_en_q;
 assign o_relu_en = relu_q;
