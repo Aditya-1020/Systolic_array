@@ -131,7 +131,7 @@ $(SIM_BUILD)/Vtop: $(SIM_BUILD)/Vtop.mk
 	    -f Vtop.mk
 endif
 
-.PHONY: help test test-all lint test-systolic test-top
+.PHONY: help test test-all lint test-systolic test-top test-mem-cdc test-res-wr
 
 help:
 	@printf '%s\n' \
@@ -171,6 +171,10 @@ test-all:
 		$(MAKE) --no-print-directory TOPLEVEL=sram_wrap MODULE=test_sram_wrap SRAM_DEPTH=256 SRAM_ADDR_W=8 sim; \
 		echo '========== MEMORY ARBITER =========='; \
 		$(MAKE) --no-print-directory TOPLEVEL=mem_arb_tb_top MODULE=test_mem_arb sim; \
+		echo '========== MEMORY CDC =========='; \
+		$(MAKE) --no-print-directory TOPLEVEL=mem_cdc_tb_top MODULE=test_mem_cdc sim; \
+		echo '========== RESULT WRITER =========='; \
+		$(MAKE) --no-print-directory TOPLEVEL=res_wr_tb_top MODULE=test_res_wr sim; \
 		echo '========== SYS_TOP APB =========='; \
 		$(MAKE) --no-print-directory TOPLEVEL=sys_top MODULE=test_sys_top_apb sim
 
@@ -179,6 +183,12 @@ test-systolic:
 
 test-top:
 	$(MAKE) --no-print-directory TOPLEVEL=sys_top MODULE=test_sys_top_apb sim
+
+test-mem-cdc:
+	$(MAKE) --no-print-directory TOPLEVEL=mem_cdc_tb_top MODULE=test_mem_cdc sim
+
+test-res-wr:
+	$(MAKE) --no-print-directory TOPLEVEL=res_wr_tb_top MODULE=test_res_wr sim
 
 lint:
 	verilator --lint-only --timing -Wno-fatal --top-module sys_top $(VERILOG_SOURCES)
