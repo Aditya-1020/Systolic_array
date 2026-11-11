@@ -13,6 +13,7 @@ constraints:
 orfs:
   design_config: "design-configs/{platform}.mk"
   flow_variant: base
+  openroad_hierarchical: false
 
 macro_placement: "design-configs/placements/lshape_right.tcl"
 

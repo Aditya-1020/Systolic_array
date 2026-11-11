@@ -9,17 +9,16 @@ TB_MAKE = $(MAKE) --no-print-directory -C tb
         test test-all test-async-fifo test-pe test-round test-relu test-postproc \
         test-systolic test-sram-wrap-64 test-sram-wrap-256 test-mem-arb \
         test-mem-cdc test-res-wr test-top lint clean
-
 help:
-	@printf '%s\\n' \
-	  'Setup:  make init | validate' \
-	  'ORFS:   make synth|floorplan|place|cts|route|finish|all RUN_TAG=baseline' \
-	  'Runs:   make status|inspect RUN_TAG=baseline' \
-	  'Tests:  make test|test-all' \
-	  '        make test-async-fifo|test-pe|test-round|test-relu|test-postproc' \
-	  '        make test-systolic|test-sram-wrap-64|test-sram-wrap-256' \
-	  '        make test-mem-arb|test-mem-cdc|test-res-wr|test-top' \
-	  'Other:  make lint | clean'
+	@printf '%s\n' \
+		'Setup:  make init | validate' \
+		'ORFS:   make synth|floorplan|place|cts|route|finish|all RUN_TAG=baseline' \
+		'Runs:   make status|inspect RUN_TAG=baseline' \
+		'Tests:  make test|test-all' \
+		'        make test-async-fifo|test-pe|test-round|test-relu|test-postproc' \
+		'        make test-systolic|test-sram-wrap-64|test-sram-wrap-256' \
+		'        make test-mem-arb|test-mem-cdc|test-res-wr|test-top' \
+		'Other:  make lint | clean'
 
 init:
 	$(FLOW) init
@@ -82,3 +81,24 @@ clean:
 	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	@rm -rf tb/sim_build_*
 	@rm -f tb/results*.xml tb/*.vcd tb/*.fst
+
+
+
+# Gui help
+.PHONY: gui
+# Generic GUI target:
+# make gui GUI_STAGE=3_3_place_gp RUN_TAG=baseline
+GUI_STAGES := synth floorplan place cts grt route finish final
+
+gui:
+	@test -n "$(GUI_STAGE)" || { echo "ERROR: GUI_STAGE is required."; echo "Usage: make gui GUI_STAGE=<stage> RUN_TAG=<tag>"; exit 2; }
+	$(PYTHON) -m scripts.flow gui "$(GUI_STAGE)" --tag "$(RUN_TAG)"
+
+
+define GUI_TARGET
+.PHONY: gui_$(1)
+gui_$(1):
+	$(PYTHON) -m scripts.flow gui $(1) --tag "$(RUN_TAG)"
+endef
+
+$(foreach stage,$(GUI_STAGES),$(eval $(call GUI_TARGET,$(stage))))
