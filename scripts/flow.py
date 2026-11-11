@@ -146,18 +146,6 @@ def status(tag: str | None = None) -> None:
         print(f"{name:<24}: {', '.join(found) if found else 'no recognized outputs'}")
 
 
-def compare_runs(baseline: str, candidate: str) -> None:
-    if baseline == candidate:
-        raise ValueError("Baseline and candidate tags must differ")
-    for tag in (baseline, candidate):
-        path = artifact_paths(tag)["mapped_netlist"]
-        if not path.is_file():
-            raise FileNotFoundError(f"Run {tag!r} has no mapped netlist: {path}")
-    raise NotImplementedError(
-        "Comparison is not implemented yet. Both tags have mapped synthesis netlists."
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.flow")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -180,9 +168,6 @@ def build_parser() -> argparse.ArgumentParser:
     item = sub.add_parser("inspect")
     item.add_argument("--tag", required=True)
 
-    item = sub.add_parser("compare")
-    item.add_argument("baseline")
-    item.add_argument("candidate")
     return parser
 
 
@@ -201,11 +186,9 @@ def main(argv: list[str] | None = None) -> int:
             status(args.tag)
         elif args.command == "inspect":
             inspect_run(args.tag)
-        elif args.command == "compare":
-            compare_runs(args.baseline, args.candidate)
     except (
         FileNotFoundError, PermissionError, ValueError,
-        subprocess.CalledProcessError, NotImplementedError,
+        subprocess.CalledProcessError,
     ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
