@@ -3,15 +3,24 @@ PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 ifeq ($(strip $(PROJECT_RTL_FILELIST)),)
 $(error PROJECT_RTL_FILELIST was not supplied by scripts.flow)
 endif
+ifeq ($(strip $(PROJECT_PLATFORM)),)
+$(error PROJECT_PLATFORM was not supplied by scripts.flow)
+endif
+ifeq ($(strip $(PROJECT_DESIGN_NAME)),)
+$(error PROJECT_DESIGN_NAME was not supplied by scripts.flow)
+endif
+ifeq ($(strip $(PROJECT_DESIGN_NICKNAME)),)
+$(error PROJECT_DESIGN_NICKNAME was not supplied by scripts.flow)
+endif
 
 RTL_NAMES := $(shell sed \
     -e 's/[[:space:]]*#.*$$//' \
     -e '/^[[:space:]]*$$/d' \
     "$(PROJECT_RTL_FILELIST)")
 
-export PLATFORM := sky130hd
-export DESIGN_NAME := sys_top
-export DESIGN_NICKNAME := systolic_array
+export PLATFORM := $(PROJECT_PLATFORM)
+export DESIGN_NAME := $(PROJECT_DESIGN_NAME)
+export DESIGN_NICKNAME := $(PROJECT_DESIGN_NICKNAME)
 export VERILOG_FILES := $(addprefix $(PROJECT_ROOT)/rtl/,$(RTL_NAMES))
 export SDC_FILE := $(PROJECT_SDC)
 export IO_CONSTRAINTS := $(PROJECT_IO_CONSTRAINTS)

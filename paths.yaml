@@ -8,8 +8,8 @@ design:
   flow_variant: "base"
 
 paths:
-  orfs_flow: "${ORFS_FLOW:-${HOME}/eda/orfs-nix/OpenROAD-flow-scripts/flow}"
-  pdk_root: "${PDK_ROOT:-${HOME}/eda/.volare}"
+  orfs_flow: "${HOME}/eda/orfs-nix/OpenROAD-flow-scripts/flow"
+  pdk_root: "${HOME}/eda/.volare"
   design_config: "design-configs/sky130hd.mk"
   rtl_dir: "rtl"
   rtl_filelist: "rtl/files.f"

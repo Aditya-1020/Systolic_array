@@ -14,15 +14,10 @@ routing to native ORFS Make targets.
 - Sky130A PDK under `PDK_ROOT`
 - Sky130 SRAM LEF and Liberty collateral under `fakeram/sky130`
 
-Install PyYAML and set local installation paths:
-
-```sh
-python -m pip install PyYAML
-export ORFS_FLOW="$HOME/eda/orfs-nix/OpenROAD-flow-scripts/flow"
-export PDK_ROOT="$HOME/eda/.volare"
-```
-
-These environment variables override the defaults in `paths.yaml`.
+Install PyYAML and edit the two installation paths in `paths.yaml` for your
+machine. Environment variables `ORFS_FLOW` and `PDK_ROOT`, when set, override
+the corresponding manifest paths. The manifest uses ordinary `${HOME}`
+expansion, not shell parameter-expansion syntax.
 
 ## Initialize and validate
 

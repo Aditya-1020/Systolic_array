@@ -8,11 +8,12 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_FILE = PROJECT_ROOT / "paths.yaml"
+ENV_OVERRIDES = {"orfs_flow": "ORFS_FLOW", "pdk_root": "PDK_ROOT"}
 
 
 def _expand(value: str, root: Path) -> Path:
-    value = os.path.expanduser(os.path.expandvars(value))
-    path = Path(value)
+    expanded = os.path.expanduser(os.path.expandvars(value))
+    path = Path(expanded)
     return (path if path.is_absolute() else root / path).resolve()
 
 
@@ -32,7 +33,11 @@ def load_config() -> dict[str, Any]:
     if not isinstance(design, dict):
         raise ValueError("paths.yaml must contain a 'design' mapping")
 
-    paths = {key: _expand(value, root) for key, value in raw_paths.items()}
+    paths = {}
+    for key, value in raw_paths.items():
+        override = os.environ.get(ENV_OVERRIDES.get(key, ""))
+        paths[key] = _expand(override if override else value, root)
+
     for key in ("name", "top", "platform", "flow_variant"):
         if not isinstance(design.get(key), str) or not design[key].strip():
             raise ValueError(f"paths.yaml design.{key} must be a non-empty string")

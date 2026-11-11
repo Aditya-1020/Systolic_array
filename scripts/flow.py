@@ -70,7 +70,10 @@ def _environment() -> dict[str, str]:
         "PROJECT_SDC": str(PATHS["sdc"]),
         "PROJECT_IO_CONSTRAINTS": str(PATHS["io_constraints"]),
         "PROJECT_MACROS_DIR": str(PATHS["macros_dir"]),
-        "PROJECT_MACRO_PLACEMENT": str(PATHS.get("macro_placement", "")),
+        "PROJECT_MACRO_PLACEMENT": str(PATHS["macro_placement"]) if PATHS.get("macro_placement") else "",
+        "PROJECT_PLATFORM": DESIGN["platform"],
+        "PROJECT_DESIGN_NAME": DESIGN["top"],
+        "PROJECT_DESIGN_NICKNAME": DESIGN["name"],
         "PDK_ROOT": str(PATHS["pdk_root"]),
     })
     return env
