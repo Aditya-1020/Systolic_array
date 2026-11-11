@@ -7,7 +7,14 @@ rtl:
   filelist: files.f
 
 constraints:
-  default: constraints/constraints_{platform}.sdc
+  default: "constraints/constraints_{platform}.sdc"
+  io: "constraints/io_constraints_{platform}.tcl"
+
+orfs:
+  design_config: "design-configs/{platform}.mk"
+  flow_variant: base
+
+macro_placement: "design-configs/placements/lshape_right.tcl"
 
 macros:
   - instance: u_wbuf_mem.g_64x64.u_mem

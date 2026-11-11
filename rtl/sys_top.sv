@@ -108,6 +108,7 @@ logic start_core;
 logic cfg_w_load, cfg_pp_en, cfg_relu, cfg_round;
 logic [SH_W-1:0] cfg_shift;
 logic [15:0] cfg_waddr, cfg_aaddr, cfg_caddr, cfg_count;
+logic dp_active;
 
 // APB domain: bridge + CSR + IRQ
 always_comb begin
@@ -345,8 +346,6 @@ seq_ctrl #(.N(N), .ACC_W(ACC_W), .SH_W(SH_W), .ROW_W(ROW_W), .BEAT_W(BEAT_W)) u_
     .i_all_written (all_written),
     .o_dp_active   (dp_active)
 );
-
-logic dp_active;
 
 sys_datapath #(.N(N), .DW(DW), .ACC_W(ACC_W), .SH_W(SH_W)) u_datapath (
     .i_clk          (i_clk_core),

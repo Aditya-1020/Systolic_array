@@ -1,1 +1,1 @@
-"""Project physical-design flow orchestration."""
+"""Configuration-driven ASIC flow utilities."""
