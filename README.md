@@ -1,131 +1,86 @@
-# Systolic Array ASIC Flow
+# Systolic Array Physical Design
 
-The design uses OpenROAD-flow-scripts (ORFS) for synthesis and physical implementation. ASICFlow provides project-aware ORFS launch, PVT STA, metrics, experiment tracking and analysis.
+OpenROAD-flow-scripts (ORFS) is the physical-design engine. The Python package
+in `scripts/` initializes and validates the project, organizes runs and
+inspects outputs. It delegates synthesis, floorplanning, placement, CTS and
+routing to native ORFS Make targets.
 
-## Install
+## Requirements
 
-Create the virtual environment in this design repository and install the sibling ASICFlow checkout into it:
+- Python 3.10+
+- PyYAML in the active Python environment
+- GNU Make
+- ORFS checkout
+- Sky130A PDK under `PDK_ROOT`
+- Sky130 SRAM LEF and Liberty collateral under `fakeram/sky130`
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ../orfs-custom-flow
-```
+Install PyYAML and set local installation paths:
 
-The Makefile uses the active Python environment. Alternatively, run `make install` while the project environment is activated.
-
-ASICFlow 0.4's `orfsx` runner discovers ORFS and PDK installations from common locations. For non-standard installations, set overrides:
-
-```bash
+```sh
+python -m pip install PyYAML
 export ORFS_FLOW="$HOME/eda/orfs-nix/OpenROAD-flow-scripts/flow"
 export PDK_ROOT="$HOME/eda/.volare"
 ```
 
-## Project manifest workflow
+These environment variables override the defaults in `paths.yaml`.
 
-`asicflow.yaml` is the project-facing configuration for the project-first `orfsx` commands. It holds the design top, platform, RTL filelist, constraints, SRAM instances, timing defaults and selected ORFS design configuration.
+## Initialize and validate
 
-```bash
-orfsx --config asicflow.yaml validate
-orfsx --config asicflow.yaml run synth
-orfsx --config asicflow.yaml run floorplan
-orfsx --config asicflow.yaml gui floorplan
-orfsx --config asicflow.yaml run place
-orfsx --config asicflow.yaml sta --stage place
-orfsx --config asicflow.yaml sta --all
+```sh
+python -m scripts.flow init
+python -m scripts.flow validate
 ```
 
-The Makefile exposes the same project-first path through `project-*` aliases:
+Initialization validates project inputs and installation paths, creates the
+build root and prints resolved configuration. It does not launch ORFS or
+modify source files and is safe to repeat.
 
-```bash
-make project-validate
-make project-synth
-make project-floorplan
-make project-gui GUI_TARGET=floorplan
-make project-place
-make project-sta STA_STAGE=place
+## Run ORFS
+
+Short commands use the default tag `base`:
+
+```sh
+python -m scripts.flow synth
+python -m scripts.flow floorplan
+python -m scripts.flow place
+python -m scripts.flow cts
+python -m scripts.flow route
+python -m scripts.flow all
 ```
 
-To select another project globally, run `orfsx project /path/to/asicflow.yaml`; to avoid global selection, pass `--config` on each command.
+Use tags to isolate experiments:
 
-### Platform selection
-
-The checked-in manifest defaults to Sky130HD. To use Nangate45, update these three settings together:
-
-- `project.platform: nangate45`
-- `physical.design_config: design-configs/nangate45.mk`
-- `paths.macros: fakeram/nangate45`
-
-For Sky130HD, use `design-configs/sky130hd.mk` and `fakeram/sky130`. The SDC is selected using the platform name. The six Sky130HD default PVT corners are declared in the manifest; Nangate45 uses the platform's nominal Liberty selection unless explicit corners are configured.
-
-The existing ORFS design Makefiles remain in place because ORFS consumes `DESIGN_CONFIG` natively. They are not yet generated from the YAML. The project manifest selects the appropriate Makefile; it does not replace its ORFS-specific configuration.
-
-## Existing advanced ASICFlow commands
-
-The original `asicflow` command tree and `config/` YAML profiles remain available for the existing advanced workflow, including metrics, sweeps, placement helpers, reports, regression comparisons and dataset ingestion.
-
-For example:
-
-```bash
-make synth PLATFORM=sky130hd RUN_TAG=baseline
-make sta-pvt PLATFORM=sky130hd RUN_TAG=baseline STAGE=place
-make metrics PLATFORM=sky130hd RUN_TAG=baseline STAGE=place
-make gui PLATFORM=sky130hd GUI_TARGET=place
-make sweep WHAT=util VALUES="40 50 60" SWEEP_EXECUTE=1
+```sh
+python -m scripts.flow run synth --tag baseline
+python -m scripts.flow run all --tag abc_speed
+python -m scripts.flow status
+python -m scripts.flow status --tag baseline
+python -m scripts.flow inspect --tag baseline
 ```
 
-These legacy targets continue to use the existing `asicflow` configuration and run layout. Do not mix an `orfsx` run with legacy metrics/STA without deliberately pointing both tools at the same work directory; the current project-first runner and legacy context use different default work-home layouts.
+Equivalent Make targets are available: `make synth RUN_TAG=baseline`,
+`make all RUN_TAG=baseline`, `make init` and `make validate`.
 
-## Standalone RTL module synthesis and STA
+Runs live under `build/orfs/<tag>/`, with ORFS's native objects, logs, reports
+and results directories and its platform/design/flow-variant hierarchy.
 
-Use `orfsx module-sta` to synthesize one module with Yosys and then run OpenSTA on the mapped netlist. This is independent of a full ORFS chip run:
+## Synthesis handoff
 
-```bash
-orfsx --config asicflow.yaml module-sta pe
-```
+The mapped gate-level netlist is `1_2_yosys.v`, and the synthesis database is
+`1_synth.odb`. Synthesis reports commonly include `synth_stat.txt` and
+`synth_check.txt`; exact report names depend on the installed ORFS revision.
+The runner does not copy outputs into a second directory.
 
-The `pe` entry in `asicflow.yaml` includes `rtl/sys_pkg.sv` before `rtl/pe.sv`, because the PE parameter defaults reference `sys_pkg`. It does not include `fast_add.sv`: the current PE implementation contains its adder logic internally and does not instantiate `fast_add`.
+## Configuration and hooks
 
-The PE has two clock inputs, `i_clk_w` and `i_clk_adv`. The dedicated `constraints/pe.sdc` constrains both at the same period and phase. In the full array they are separately gated versions of the same root clock, so do not declare them asynchronous for this isolated PE analysis. The SDC uses a 20% input/output timing budget and is intended for comparative block analysis; it is not a substitute for signoff constraints including extracted clock-gate and interconnect effects.
+- `paths.yaml`: design identity and project/install paths.
+- `design-configs/sky130hd.mk`: ORFS design and synthesis variables.
+- `scripts/hooks/`: project-owned Tcl/Yosys extensions.
+- `scripts/flow.py`: initialization, validation, ORFS launch and inspection.
 
-Reports and intermediate files are written to:
+ORFS hook availability varies by revision. Verify the installed ORFS scripts
+before enabling a hook. Prefer native synthesis settings and targeted hooks
+over replacing the full synthesis script.
 
-```
-build/<platform>/<run_tag>/reports/modules/pe/
-├── synth.ys
-├── yosys.log
-├── area.rpt
-├── netlist.v
-├── opensta.log
-├── check_setup.rpt
-├── setup.rpt
-├── hold.rpt
-└── ...
-```
-
-The same command is available through Make:
-
-```bash
-make project-module-sta MODULE=pe
-```
-
-Add another entry under `modules` for each block that needs standalone synthesis and timing analysis. Provide its complete source dependency list, top name, platform Liberty override if needed, and a module-specific SDC when it has nontrivial clocking.
-
-## RTL verification and auxiliary flows
-
-RTL simulation, lint, CSR generation, Fakeram generation and gate-level regression remain independent of ORFS stage execution:
-
-```bash
-make lint
-make test
-make regress
-make csr
-make fakeram
-make gl-check STAGE=place
-make gl-regress STAGE=place
-```
-
-## Outputs
-
-The project-first runner writes under `build/<platform>/<run_tag>/`, retaining ORFS's native results, logs and reports hierarchy. The legacy CLI continues to use the existing `build/runs/<platform>/<design>/<run_tag>/` layout.
+Run comparison is not implemented yet; it will be added after the baseline
+synthesis and placement handoffs are reproducible.

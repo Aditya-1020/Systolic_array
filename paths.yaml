@@ -8,19 +8,13 @@ design:
   flow_variant: "base"
 
 paths:
-  orfs_flow: "${HOME}/eda/orfs-nix/OpenROAD-flow-scripts/flow"
-  pdk_root: "${HOME}/eda/.volare" # better to use $PDK_ROOT? 
-
+  orfs_flow: "${ORFS_FLOW:-${HOME}/eda/orfs-nix/OpenROAD-flow-scripts/flow}"
+  pdk_root: "${PDK_ROOT:-${HOME}/eda/.volare}"
   design_config: "design-configs/sky130hd.mk"
-
   rtl_dir: "rtl"
   rtl_filelist: "rtl/files.f"
-
-  constraints_dir: "constraints"
   sdc: "constraints/constraints_sky130hd.sdc"
   io_constraints: "constraints/io_constraints_sky130hd.tcl"
-
   macros_dir: "fakeram/sky130"
   macro_placement: "design-configs/placements/lshape_right.tcl"
-
   build_dir: "build"
