@@ -6,7 +6,6 @@ RTL_NAMES := $(shell sed \
     "$(PROJECT_RTL_FILELIST)")
 
 export PLATFORM := sky130hd
-
 export DESIGN_NAME := sys_top
 export DESIGN_NICKNAME := systolic_array
 
@@ -15,8 +14,8 @@ export VERILOG_FILES := $(addprefix $(PROJECT_ROOT)/rtl/,$(RTL_NAMES))
 export SDC_FILE := $(PROJECT_SDC)
 export IO_CONSTRAINTS := $(PROJECT_IO_CONSTRAINTS)
 
-export ADDITIONAL_LEFS := $(sort $(wildcard $(PROJECT_FAKERAM_DIR)/*/*.lef))
-export ADDITIONAL_LIBS := $(sort $(wildcard $(PROJECT_FAKERAM_DIR)/*/*.lib))
+export ADDITIONAL_LEFS := $(sort $(wildcard $(PROJECT_MACROS_DIR)/*/*.lef))
+export ADDITIONAL_LIBS := $(sort $(wildcard $(PROJECT_MACROS_DIR)/*/*.lib))
 
 export MACRO_PLACEMENT_TCL := $(PROJECT_MACRO_PLACEMENT)
 
