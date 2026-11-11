@@ -1,8 +1,0 @@
-# Machine-specific installation paths and repository root only.
-repository:
-  root: "."
-
-paths:
-  orfs_flow: "${HOME}/eda/orfs-nix/OpenROAD-flow-scripts/flow"
-  pdk_root: "${HOME}/eda/.volare"
-  build_dir: "build"

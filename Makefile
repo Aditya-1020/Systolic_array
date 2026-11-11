@@ -1,39 +1,41 @@
 .DEFAULT_GOAL := help
 
-PYTHON ?= python3
-RUN_TAG ?= base
-FLOW := $(PYTHON) -m scripts.flow
-TB_MAKE = $(MAKE) --no-print-directory -C tb
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+TB_MAKE := $(MAKE) --no-print-directory -C $(ROOT)/tb
 
-.PHONY: help init validate synth floorplan place cts route finish all status inspect \
-        test test-all test-async-fifo test-pe test-round test-relu test-postproc \
-        test-systolic test-sram-wrap-64 test-sram-wrap-256 test-mem-arb \
-        test-mem-cdc test-res-wr test-top lint clean
-help:
-	@printf '%s\n' \
-		'Setup:  make init | validate' \
-		'ORFS:   make synth|floorplan|place|cts|route|finish|all RUN_TAG=baseline' \
-		'Runs:   make status|inspect RUN_TAG=baseline' \
-		'Tests:  make test|test-all' \
-		'        make test-async-fifo|test-pe|test-round|test-relu|test-postproc' \
-		'        make test-systolic|test-sram-wrap-64|test-sram-wrap-256' \
-		'        make test-mem-arb|test-mem-cdc|test-res-wr|test-top' \
-		'Other:  make lint | clean'
+ORFS_FLOW ?= $(HOME)/eda/orfs-nix/OpenROAD-flow-scripts/flow
 
-init:
-	$(FLOW) init
+DESIGN_CONFIG ?= $(ROOT)/config/orfs_config/sys_top.mk
 
-validate:
-	$(FLOW) validate
+FLOW_VARIANT ?= base
+WORK_HOME ?= $(ROOT)/build/orfs
 
-synth floorplan place cts route finish all:
-	$(FLOW) run $@ --tag "$(RUN_TAG)"
+# ORFS_MAKE = $(MAKE) --no-print-directory -C "$(ORFS_FLOW)" DESIGN_CONFIG="$(DESIGN_CONFIG)" FLOW_VARIANT="$(FLOW_VARIANT)" WORK_HOME="$(WORK_HOME)"
+ORFS_MAKE = $(MAKE) --no-print-directory -C "$(ORFS_FLOW)" DESIGN_CONFIG="$(abspath $(DESIGN_CONFIG))" FLOW_VARIANT="$(FLOW_VARIANT)" WORK_HOME="$(abspath $(WORK_HOME))"
 
-status:
-	$(FLOW) status --tag "$(RUN_TAG)"
+.PHONY: check-orfs
+check-orfs:
+	@test -f "$(ORFS_FLOW)/Makefile" || { echo "ERROR: ORFS Makefile not found: $(ORFS_FLOW)/Makefile"; exit 1; }
+	@test -f "$(DESIGN_CONFIG)" || { echo "ERROR: Design config not found: $(DESIGN_CONFIG)"; exit 1; }
 
-inspect:
-	$(FLOW) inspect --tag "$(RUN_TAG)"
+.PHONY: synth floorplan place cts grt route finish all
+
+synth floorplan place cts grt route finish all: check-orfs
+	$(ORFS_MAKE) $@
+
+
+.PHONY: gui-synth gui-floorplan gui-place gui-cts gui-grt gui-route gui-final
+
+gui-synth gui-floorplan gui-place gui-cts gui-grt gui-route gui-final: check-orfs
+	$(ORFS_MAKE) gui_$(patsubst gui-%,%,$@)
+
+.PHONY: gui
+gui: check-orfs
+	@test -n "$(GUI_STAGE)" || { echo "Usage: make gui GUI_STAGE=<ORFS GUI target>"; exit 2; }
+	$(ORFS_MAKE) gui_$(GUI_STAGE)
+
+.PHONY: test test-all test-async-fifo test-pe test-round test-relu test-postproc test-systolic \
+        test-sram-wrap-64 test-sram-wrap-256 test-mem-arb test-mem-cdc test-res-wr test-top lint
 
 test test-all:
 	$(TB_MAKE) test-all
@@ -77,28 +79,42 @@ test-top:
 lint:
 	$(TB_MAKE) lint
 
-clean:
-	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-	@rm -rf tb/sim_build_*
-	@rm -f tb/results*.xml tb/*.vcd tb/*.fst
+.PHONY: clean clean-tb clean-orfs
 
+# remove simulation outs
+clean: clean-tb
 
+clean-tb:
+	@find "$(ROOT)" -type d -name '__pycache__' -prune -exec rm -rf {} +
+	@rm -rf "$(ROOT)"/tb/sim_build_*
+	@rm -f "$(ROOT)"/tb/results*.xml
+	@rm -f "$(ROOT)"/tb/*.vcd "$(ROOT)"/tb/*.fst
 
-# Gui help
-.PHONY: gui
-# Generic GUI target:
-# make gui GUI_STAGE=3_3_place_gp RUN_TAG=baseline
-GUI_STAGES := synth floorplan place cts grt route finish final
+# remove orfs generated results
+clean-orfs: check-orfs
+	$(ORFS_MAKE) clean_all
 
-gui:
-	@test -n "$(GUI_STAGE)" || { echo "ERROR: GUI_STAGE is required."; echo "Usage: make gui GUI_STAGE=<stage> RUN_TAG=<tag>"; exit 2; }
-	$(PYTHON) -m scripts.flow gui "$(GUI_STAGE)" --tag "$(RUN_TAG)"
-
-
-define GUI_TARGET
-.PHONY: gui_$(1)
-gui_$(1):
-	$(PYTHON) -m scripts.flow gui $(1) --tag "$(RUN_TAG)"
-endef
-
-$(foreach stage,$(GUI_STAGES),$(eval $(call GUI_TARGET,$(stage))))
+.PHONY: help
+help:
+	@printf '%s\n' \
+		'Physical design:' \
+		'  make synth|floorplan|place|cts|grt|route|finish|all' \
+		'  make gui GUI_STAGE=<stage>' \
+		'  make gui-synth|gui-floorplan|gui-place|gui-cts|gui-grt|gui-route|gui-final' \
+		'' \
+		'Configuration:' \
+		'  DESIGN_CONFIG=config/orfs_config/sys_top.mk' \
+		'  DESIGN_CONFIG=config/orfs_config/accelerator.mk' \
+		'  FLOW_VARIANT=base' \
+		'  WORK_HOME=build/orfs' \
+		'' \
+		'Verification:' \
+		'  make test-all' \
+		'  make test-pe|test-systolic|test-postproc|test-top' \
+		'  make test-async-fifo|test-mem-arb|test-mem-cdc|test-res-wr' \
+		'  make test-sram-wrap-64|test-sram-wrap-256' \
+		'  make lint' \
+		'' \
+		'Cleanup:' \
+		'  make clean       (simulation products)' \
+		'  make clean-orfs  (ORFS generated products)'
