@@ -1,0 +1,13 @@
+FP_DIE_W:
+  description: Die width to derive DIE_AREA and CORE_AREA
+  stages:
+    - floorplan
+  tunable: 1
+  type: int
+
+FP_DIE_H:
+  description: Die height to derive DIE_AREA and CORE_AREA
+  stages:
+    - floorplan
+  tunable: 1
+  type: int

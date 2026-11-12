@@ -1,0 +1,12 @@
+{
+    "FP_DIE_W": {
+        "type": "int",
+        "minmax": [140, 166],
+        "step": 5
+    },
+    "FP_DIE_H": {
+        "type": "int",
+        "minmax": [135, 166],
+        "step": 5
+    }
+}
